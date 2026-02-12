@@ -38,7 +38,7 @@ export function PlayerRing({
             {isCurrent && (
               <motion.div
                 layoutId="turn-indicator"
-                className="absolute -inset-1 rounded-full border-2 border-purple-400 shadow-[0_0_12px_rgba(168,85,247,0.5)]"
+                className="absolute -inset-1 rounded-full border-2 border-primary shadow-[0_0_12px_hsl(var(--primary)/0.5)]"
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               />
             )}
@@ -47,8 +47,8 @@ export function PlayerRing({
               className={cn(
                 "relative w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold transition-colors",
                 isCurrent
-                  ? "bg-purple-600 text-white"
-                  : "bg-slate-700 text-slate-300",
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground",
               )}
             >
               {initial}
@@ -57,7 +57,7 @@ export function PlayerRing({
             <span
               className={cn(
                 "text-xs max-w-[72px] truncate text-center",
-                isCurrent ? "text-purple-300 font-medium" : "text-slate-400",
+                isCurrent ? "text-foreground font-medium" : "text-muted-foreground",
               )}
             >
               {player.name ?? "Anon"}

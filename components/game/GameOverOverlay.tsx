@@ -43,7 +43,7 @@ export function GameOverOverlay({
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-md"
     >
       <AnimatePresence mode="wait">
         {/* ─── Phase 1: King's Cup Reveal ─── */}
@@ -76,7 +76,7 @@ export function GameOverOverlay({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="text-2xl font-bold text-white text-center"
+              className="text-2xl font-bold text-foreground text-center"
             >
               {playerName} drew the 4th King!
             </motion.p>
@@ -85,7 +85,7 @@ export function GameOverOverlay({
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 1.4 }}
-              className="text-lg text-purple-300 text-center"
+              className="text-lg text-muted-foreground text-center"
             >
               They drink the King&apos;s Cup!
             </motion.p>
@@ -99,22 +99,22 @@ export function GameOverOverlay({
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="flex flex-col items-center gap-6 rounded-2xl bg-slate-800/90 border border-slate-600 backdrop-blur-md px-10 py-8 max-w-sm w-full mx-4"
+            className="flex flex-col items-center gap-6 rounded-2xl bg-card/90 border backdrop-blur-md px-10 py-8 max-w-sm w-full mx-4"
           >
-            <h2 className="text-3xl font-bold text-white">Game Over</h2>
+            <h2 className="text-3xl font-bold">Game Over</h2>
 
             <div className="flex gap-8 text-center">
               <div>
-                <p className="text-2xl font-semibold text-purple-400">
+                <p className="text-2xl font-semibold text-primary">
                   {roundNumber}
                 </p>
-                <p className="text-xs text-slate-400">Rounds</p>
+                <p className="text-xs text-muted-foreground">Rounds</p>
               </div>
               <div>
-                <p className="text-2xl font-semibold text-purple-400">
+                <p className="text-2xl font-semibold text-primary">
                   {cardsDrawn}
                 </p>
-                <p className="text-xs text-slate-400">Cards Drawn</p>
+                <p className="text-xs text-muted-foreground">Cards Drawn</p>
               </div>
             </div>
 
@@ -122,12 +122,12 @@ export function GameOverOverlay({
               <Button
                 onClick={onPlayAgain}
                 disabled={isRestarting}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white"
+                className="w-full"
               >
                 {isRestarting ? "Restarting..." : "Play Again"}
               </Button>
             ) : (
-              <p className="text-sm text-slate-400 text-center">
+              <p className="text-sm text-muted-foreground text-center">
                 Waiting for the host to restart...
               </p>
             )}

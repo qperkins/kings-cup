@@ -93,9 +93,9 @@ export default function RoomPage() {
   // ── Invalid room code ──
   if (!roomCode) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
-        <Card className="w-full max-w-md bg-slate-800/50 border-slate-700">
-          <CardContent className="p-6 text-center text-slate-300">
+      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center text-muted-foreground">
             Invalid room code
           </CardContent>
         </Card>
@@ -112,9 +112,9 @@ export default function RoomPage() {
     };
 
     return (
-      <main className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
+      <main className="min-h-screen bg-gradient-to-br from-background via-muted to-background p-4">
         <div className="text-center mb-2">
-          <span className="font-mono text-sm tracking-widest text-purple-400/60">
+          <span className="font-mono text-sm tracking-widest text-muted-foreground/60">
             {roomCode}
           </span>
         </div>
@@ -129,14 +129,14 @@ export default function RoomPage() {
 
   // ── Lobby view ──
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
-      <Card className="w-full max-w-md bg-slate-800/50 border-slate-700 backdrop-blur-sm">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+      <Card className="w-full max-w-md backdrop-blur-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-white">
+          <CardTitle className="text-2xl font-bold">
             Room Lobby
           </CardTitle>
-          <CardDescription className="text-slate-300">
-            <span className="font-mono text-xl tracking-widest text-purple-400">
+          <CardDescription>
+            <span className="font-mono text-xl tracking-widest text-primary">
               {roomCode}
             </span>
           </CardDescription>
@@ -144,37 +144,37 @@ export default function RoomPage() {
         <CardContent className="space-y-6">
           {/* Player List */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-slate-200">
+            <h3 className="text-sm font-medium">
               Players ({players?.length ?? 0})
             </h3>
             <div className="space-y-2">
               {players === undefined ? (
-                <div className="text-center text-slate-400 py-4">
+                <div className="text-center text-muted-foreground py-4">
                   Loading players...
                 </div>
               ) : players.length === 0 ? (
-                <div className="text-center text-slate-400 py-4">
+                <div className="text-center text-muted-foreground py-4">
                   No players yet
                 </div>
               ) : (
                 players.map((player, index) => (
                   <div
                     key={player.userId}
-                    className="flex items-center justify-between p-3 rounded-lg bg-slate-700/50 border border-slate-600"
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white font-medium">
+                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
                         {(player.name ?? "?").charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-white">
+                      <span className="font-medium">
                         {player.name ?? "Anonymous"}
                         {player.userId === userId && (
-                          <span className="text-purple-400 ml-2">(you)</span>
+                          <span className="text-muted-foreground ml-2">(you)</span>
                         )}
                       </span>
                     </div>
                     {index === 0 && (
-                      <span className="text-xs bg-purple-600 text-white px-2 py-1 rounded">
+                      <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
                         Host
                       </span>
                     )}
@@ -188,7 +188,7 @@ export default function RoomPage() {
           {isHost ? (
             <div className="space-y-3">
               {players && players.length < 2 ? (
-                <p className="text-center text-slate-400 text-sm">
+                <p className="text-center text-muted-foreground text-sm">
                   Waiting for at least one more player to join...
                 </p>
               ) : null}
@@ -200,20 +200,20 @@ export default function RoomPage() {
                   isStarting ||
                   gameActive
                 }
-                className="w-full bg-green-600 hover:bg-green-700 text-white disabled:opacity-50"
+                className="w-full"
               >
                 {isStarting ? "Starting..." : "Start Game"}
               </Button>
             </div>
           ) : (
-            <p className="text-center text-slate-400 text-sm">
+            <p className="text-center text-muted-foreground text-sm">
               Waiting for the host to start the game...
             </p>
           )}
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 rounded-md bg-red-900/50 border border-red-700 text-red-200 text-sm text-center">
+            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/50 text-destructive text-sm text-center">
               {error}
             </div>
           )}
@@ -222,15 +222,15 @@ export default function RoomPage() {
           <Button
             onClick={handleLeaveRoom}
             variant="outline"
-            className="w-full border-slate-600 text-slate-300 hover:bg-slate-700 hover:text-white"
+            className="w-full"
           >
             Leave Room
           </Button>
 
           {/* Share Info */}
-          <div className="text-center text-slate-400 text-sm">
+          <div className="text-center text-muted-foreground text-sm">
             <p>Share this code with friends:</p>
-            <p className="font-mono text-lg text-purple-400 tracking-widest mt-1">
+            <p className="font-mono text-lg text-primary tracking-widest mt-1">
               {roomCode}
             </p>
           </div>

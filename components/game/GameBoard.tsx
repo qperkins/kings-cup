@@ -194,7 +194,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
         />
 
         {/* ── Turn indicator text ── */}
-        <p className="text-sm text-slate-300 text-center">
+        <p className="text-sm text-muted-foreground text-center">
           {isMyTurn
             ? drawnThisTurn
               ? "Your turn \u2014 end turn when ready"
@@ -227,7 +227,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
                 }
               />
             </div>
-            <p className="text-center text-xs text-slate-400 mt-1">
+            <p className="text-center text-xs text-muted-foreground mt-1">
               {deckRemaining} left
             </p>
           </div>
@@ -267,9 +267,9 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
               ) : (
                 <motion.div
                   key="empty-discard"
-                  className="w-28 h-[160px] rounded-lg border-2 border-dashed border-slate-600 flex items-center justify-center"
+                  className="w-28 h-[160px] rounded-lg border-2 border-dashed border-muted flex items-center justify-center"
                 >
-                  <span className="text-xs text-slate-500">Discard</span>
+                  <span className="text-xs text-muted-foreground">Discard</span>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -285,7 +285,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
 
         {/* ── Kings Counter ── */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-slate-400">Kings:</span>
+          <span className="text-xs text-muted-foreground">Kings:</span>
           {[0, 1, 2, 3].map((i) => (
             <motion.div
               key={i}
@@ -293,7 +293,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
                 "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border",
                 i < kingsDrawn
                   ? "bg-yellow-600 border-yellow-500 text-white"
-                  : "bg-slate-700 border-slate-600 text-slate-500",
+                  : "bg-muted border text-muted-foreground",
               )}
               animate={i < kingsDrawn ? { scale: [1, 1.2, 1] } : undefined}
               transition={{ duration: 0.3 }}
@@ -309,7 +309,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
             <Button
               onClick={handleDraw}
               disabled={drawnThisTurn || isDrawing || deckRemaining <= 0}
-              className="flex-1 bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50"
+              className="flex-1"
             >
               {isDrawing ? "Drawing..." : "Draw Card"}
             </Button>
@@ -317,7 +317,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
               onClick={handleEndTurn}
               disabled={!drawnThisTurn || isEndingTurn}
               variant="outline"
-              className="flex-1 border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white disabled:opacity-50"
+              className="flex-1"
             >
               {isEndingTurn ? "Ending..." : "End Turn"}
             </Button>
@@ -325,14 +325,14 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
         )}
 
         {/* ── Round / Cards info ── */}
-        <div className="flex gap-6 text-xs text-slate-500">
+        <div className="flex gap-6 text-xs text-muted-foreground">
           <span>Round {roundNumber}</span>
           <span>{cardsDrawn} drawn</span>
         </div>
 
         {/* ── Error Message ── */}
         {error && (
-          <div className="p-3 rounded-md bg-red-900/50 border border-red-700 text-red-200 text-sm text-center w-full max-w-xs">
+          <div className="p-3 rounded-md bg-destructive/10 border border-destructive/50 text-destructive text-sm text-center w-full max-w-xs">
             {error}
           </div>
         )}

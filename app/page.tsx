@@ -117,13 +117,13 @@ export default function HomePage() {
   const canCreate = playerName.trim().length > 0;
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-4">
-      <Card className="w-full max-w-md bg-slate-800/50 border-slate-700 backdrop-blur-sm">
+    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+      <Card className="w-full max-w-md backdrop-blur-sm">
         <CardHeader className="text-center">
-          <CardTitle className="text-3xl font-bold text-white">
+          <CardTitle className="text-3xl font-bold">
             King&apos;s Cup
           </CardTitle>
-          <CardDescription className="text-slate-300">
+          <CardDescription>
             The classic drinking game, now online
           </CardDescription>
         </CardHeader>
@@ -132,7 +132,7 @@ export default function HomePage() {
           <div className="space-y-2">
             <label
               htmlFor="playerName"
-              className="text-sm font-medium text-slate-200"
+              className="text-sm font-medium"
             >
               Your Name
             </label>
@@ -142,7 +142,6 @@ export default function HomePage() {
               placeholder="Enter your name"
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-purple-500"
               maxLength={20}
             />
           </div>
@@ -152,7 +151,7 @@ export default function HomePage() {
             <div className="space-y-2">
               <label
                 htmlFor="roomCode"
-                className="text-sm font-medium text-slate-200"
+                className="text-sm font-medium"
               >
                 Room Code
               </label>
@@ -162,14 +161,14 @@ export default function HomePage() {
                 placeholder="Enter 6-character code"
                 value={roomCode}
                 onChange={(e) => setRoomCode(e.target.value.toUpperCase())}
-                className="bg-slate-700/50 border-slate-600 text-white placeholder:text-slate-400 focus:border-purple-500 uppercase tracking-widest text-center font-mono text-lg"
+                className="uppercase tracking-widest text-center font-mono text-lg"
                 maxLength={6}
               />
             </div>
             <Button
               onClick={handleJoinRoom}
               disabled={!canJoin || isLoading}
-              className="w-full bg-purple-600 hover:bg-purple-700 text-white disabled:opacity-50"
+              className="w-full"
             >
               {isLoading ? "Joining..." : "Join Room"}
             </Button>
@@ -178,10 +177,10 @@ export default function HomePage() {
           {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-slate-600" />
+              <div className="w-full border-t" />
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className="bg-slate-800 px-4 text-slate-400">or</span>
+              <span className="bg-card px-4 text-muted-foreground">or</span>
             </div>
           </div>
 
@@ -190,14 +189,14 @@ export default function HomePage() {
             onClick={handleCreateRoom}
             disabled={!canCreate || isLoading}
             variant="outline"
-            className="w-full border-slate-600 text-slate-200 hover:bg-slate-700 hover:text-white disabled:opacity-50"
+            className="w-full"
           >
             {isLoading ? "Creating..." : "Create New Room"}
           </Button>
 
           {/* Error Message */}
           {error && (
-            <div className="p-3 rounded-md bg-red-900/50 border border-red-700 text-red-200 text-sm text-center">
+            <div className="p-3 rounded-md bg-destructive/10 border border-destructive/50 text-destructive text-sm text-center">
               {error}
             </div>
           )}
