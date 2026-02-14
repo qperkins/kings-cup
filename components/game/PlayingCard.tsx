@@ -38,7 +38,7 @@ export function PlayingCard({
     <motion.div
       layoutId={layoutId}
       className={cn(
-        "inline-block rounded-lg overflow-hidden shadow-lg select-none",
+        "inline-block  overflow-hidden shadow-lg select-none",
         onClick && "cursor-pointer",
         className,
       )}

@@ -32,13 +32,13 @@ export function PlayerRing({
         return (
           <div
             key={player.userId}
-            className="relative flex flex-col items-center gap-1"
+            className="relative flex flex-col items-center gap-1 mx-2"
           >
             {/* Animated turn indicator ring */}
             {isCurrent && (
               <motion.div
                 layoutId="turn-indicator"
-                className="absolute -inset-1 rounded-full border-2 border-primary shadow-[0_0_12px_hsl(var(--primary)/0.5)]"
+                className="absolute -inset-1 rounded p-4 border-2 border-primary shadow-[0_0_12px_hsl(var(--primary)/0.5)]"
                 transition={{ type: "spring", stiffness: 400, damping: 30 }}
               />
             )}
@@ -57,7 +57,9 @@ export function PlayerRing({
             <span
               className={cn(
                 "text-xs max-w-[72px] truncate text-center",
-                isCurrent ? "text-foreground font-medium" : "text-muted-foreground",
+                isCurrent
+                  ? "text-foreground font-medium"
+                  : "text-muted-foreground",
               )}
             >
               {player.name ?? "Anon"}

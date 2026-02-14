@@ -403,6 +403,16 @@ export const getGameState = query({
     const lastDrawnCard =
       discard.length > 0 ? discard[discard.length - 1] : null;
 
+    // Get the rule text for the last drawn card
+    const rules = (game.rules ?? DEFAULT_KINGS_CUP_RULES) as {
+      byRank?: Record<string, string>;
+      version?: string;
+    };
+    const lastCardRule =
+      lastDrawnCard && typeof lastDrawnCard === "object"
+        ? (rules.byRank?.[(lastDrawnCard as { rank?: string }).rank ?? ""] ?? null)
+        : null;
+
     gameStateContext.total_players = turnOrder.length;
     gameStateContext.players_remaining = turnOrder.length;
     gameStateContext.turn_index = turnIndex;
@@ -430,6 +440,7 @@ export const getGameState = query({
       game,
       currentPlayer,
       lastDrawnCard,
+      lastCardRule,
     };
   },
 });

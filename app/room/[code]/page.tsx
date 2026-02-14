@@ -109,6 +109,7 @@ export default function RoomPage() {
       game: gameStateRaw.game as GameState["game"],
       currentPlayer: gameStateRaw.currentPlayer as GameState["currentPlayer"],
       lastDrawnCard: gameStateRaw.lastDrawnCard as GameState["lastDrawnCard"],
+      lastCardRule: gameStateRaw.lastCardRule as GameState["lastCardRule"],
     };
 
     return (

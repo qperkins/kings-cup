@@ -48,6 +48,7 @@ export interface GameState {
   game: GameDoc | null;
   currentPlayer: CurrentPlayer | null;
   lastDrawnCard: CardData | null;
+  lastCardRule?: string | null;
 }
 
 interface GameBoardProps {
@@ -57,11 +58,93 @@ interface GameBoardProps {
 }
 
 // ---------------------------------------------------------------------------
+// Detailed Rules Data
+// ---------------------------------------------------------------------------
+
+const kingsCupRules = {
+  A: {
+    name: "Waterfall",
+    description: `Everyone starts drinking at the same time.
+The player who drew the card starts first, then going clockwise each player starts once the previous player has started.
+No one can stop drinking until the person before them stops; the first player chooses when to stop, which lets everyone else stop in order.`,
+  },
+  "2": {
+    name: "You",
+    description: `The player who drew the card chooses one person to drink.
+They point to or name a player and that person takes a drink.`,
+  },
+  "3": {
+    name: "Me",
+    description: `The player who drew the card drinks themselves.
+No one else is affected.`,
+  },
+  "4": {
+    name: "Floor",
+    description: `Everyone races to touch the floor.
+The last person to touch the floor drinks.
+If someone can't reach the floor, agree on an alternative (like touching a chair leg) before playing.`,
+  },
+  "5": {
+    name: "Guys",
+    description: `All men at the table drink.
+You can re-theme this (for inclusivity) to something like "left side of the table drinks" if your group prefers.`,
+  },
+  "6": {
+    name: "Chicks",
+    description: `All women at the table drink.
+You can re-theme this (for inclusivity) to something like "right side of the table drinks" if your group prefers.`,
+  },
+  "7": {
+    name: "Heaven",
+    description: `Everyone races to point one hand up toward the ceiling.
+The last person to raise their hand drinks.
+If someone can't raise a hand, agree on a substitute action (like saying "Heaven") beforehand.`,
+  },
+  "8": {
+    name: "Mate",
+    description: `The player who drew the card chooses a mate (partner).
+From now on, whenever either of them has to drink for any reason, both drink.
+This link lasts until the game ends or the group agrees to cancel it.`,
+  },
+  "9": {
+    name: "Rhyme",
+    description: `The player who drew the card says one word out loud.
+Going clockwise, each player must say a new word that rhymes with that word.
+No repeats and use a short time limit (e.g., 3 seconds); the first person who fails, repeats, or is too slow drinks.`,
+  },
+  "10": {
+    name: "Categories",
+    description: `The player who drew the card announces a category (e.g., types of beer, car brands, NBA teams).
+Going clockwise, each player must name something that fits the category.
+No repeats and use a short time limit; the first person who fails, repeats, or names something that doesn't fit drinks.`,
+  },
+  J: {
+    name: "Never Have I Ever",
+    description: `Everyone starts with 3 fingers up (or another number you choose).
+The player who drew the card says "Never have I ever..." followed by something they've never done.
+Anyone who has done that thing puts one finger down and drinks.
+You can do a quick mini-round (each player says one statement) or just one statement from the drawer.`,
+  },
+  Q: {
+    name: "Questions",
+    description: `Players enter a "questions only" mini-game.
+Starting with the player who drew the card and going clockwise, each player must speak only in questions directed at other players.
+If someone makes a statement, repeats a question, or takes too long to respond, that person drinks and the mini-game ends (unless you choose to continue).`,
+  },
+  K: {
+    name: "King's Cup",
+    description: `Place an empty cup in the middle of the table at the start of the game (the King's Cup).
+Each time a King is drawn, the player pours some of their drink into the King's Cup.
+When the fourth King is drawn, the player who drew that fourth King must drink the King's Cup (or take a large sip, if you want a lighter rule).`,
+  },
+} as const;
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
-  const { game, currentPlayer, lastDrawnCard } = gameState;
+  const { game, currentPlayer, lastDrawnCard, lastCardRule } = gameState;
 
   const drawCardMutation = useMutation(api.game.drawCard);
   const endTurnMutation = useMutation(api.game.endTurn);
@@ -72,7 +155,6 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
   const [isDrawing, setIsDrawing] = useState(false);
   const [isEndingTurn, setIsEndingTurn] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
-  const [currentRule, setCurrentRule] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   // Track turn index so we can detect turn changes and reset local state
@@ -82,7 +164,6 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
   useEffect(() => {
     if (prevTurnIndexRef.current !== null && prevTurnIndexRef.current !== turnIndex) {
       setDrawnThisTurn(false);
-      setCurrentRule(null);
     }
     prevTurnIndexRef.current = turnIndex;
   }, [turnIndex]);
@@ -115,13 +196,12 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
     setError(null);
 
     try {
-      const result = await drawCardMutation({
+      await drawCardMutation({
         roomId: roomCode,
         userId,
       });
 
       setDrawnThisTurn(true);
-      setCurrentRule(typeof result.rule === "string" ? result.rule : null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to draw card";
       setError(msg);
@@ -158,7 +238,6 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
         userId,
       });
       setDrawnThisTurn(false);
-      setCurrentRule(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to restart";
       setError(msg);
@@ -170,13 +249,13 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
   // ── Early return (after all hooks) ──
   if (!game) return null;
 
-  // Determine drawn card display data
+  // Determine drawn card display data - show for ALL players
   const drawnCard: CardData | null =
     drawnThisTurn && lastDrawnCard ? lastDrawnCard : null;
 
-  const drawnCardRank = drawnCard?.rank ?? null;
-  const drawnCardSuit = drawnCard?.suit ?? null;
-  const ruleForDisplay = drawnThisTurn ? currentRule : null;
+  const drawnCardRank = lastDrawnCard?.rank ?? null;
+  const drawnCardSuit = lastDrawnCard?.suit ?? null;
+  const ruleForDisplay = lastCardRule ?? null;
 
   return (
     <LayoutGroup>
@@ -203,20 +282,20 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
         </p>
 
         {/* ── Card Table ── */}
-        <div className="relative flex items-center justify-center gap-8 min-h-[200px]">
+        <div className="relative flex items-center justify-center gap-8 min-h-[280px]">
           {/* Deck pile */}
           <div className="relative">
             {deckRemaining > 2 && (
-              <div className="absolute top-[3px] left-[3px] w-28 opacity-60">
+              <div className="absolute top-[4px] left-[4px] w-[9.8rem] opacity-60">
                 <PlayingCard faceDown disableHover />
               </div>
             )}
             {deckRemaining > 1 && (
-              <div className="absolute top-[1.5px] left-[1.5px] w-28 opacity-80">
+              <div className="absolute top-[2px] left-[2px] w-[9.8rem] opacity-80">
                 <PlayingCard faceDown disableHover />
               </div>
             )}
-            <div className="relative w-28">
+            <div className="relative w-[9.8rem]">
               <PlayingCard
                 faceDown
                 disableHover={!isMyTurn || drawnThisTurn}
@@ -233,16 +312,16 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
           </div>
 
           {/* Discard / drawn card area */}
-          <div className="relative w-28 min-h-[160px] flex items-center justify-center">
+          <div className="relative w-[9.8rem] min-h-[224px] flex items-center justify-center">
             <AnimatePresence mode="wait">
               {drawnCard ? (
                 <motion.div
                   key={drawnCard.id}
-                  initial={{ x: -120, rotateY: 180, opacity: 0 }}
+                  initial={{ x: -170, rotateY: 180, opacity: 0 }}
                   animate={{ x: 0, rotateY: 0, opacity: 1 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={CARD_SPRING}
-                  className="w-28"
+                  className="w-[9.8rem]"
                   style={{ perspective: 800 }}
                 >
                   <PlayingCard
@@ -256,7 +335,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
                   key={`last-${lastDrawnCard.id}`}
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 0.5 }}
-                  className="w-28"
+                  className="w-[9.8rem]"
                 >
                   <PlayingCard
                     rank={lastDrawnCard.rank}
@@ -267,7 +346,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
               ) : (
                 <motion.div
                   key="empty-discard"
-                  className="w-28 h-[160px] rounded-lg border-2 border-dashed border-muted flex items-center justify-center"
+                  className="w-[9.8rem] h-[224px] rounded-lg border-2 border-dashed border-muted flex items-center justify-center"
                 >
                   <span className="text-xs text-muted-foreground">Discard</span>
                 </motion.div>
@@ -322,6 +401,24 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
               {isEndingTurn ? "Ending..." : "End Turn"}
             </Button>
           </div>
+        )}
+
+        {/* ── Detailed Rules for Current Card ── */}
+        {lastDrawnCard?.rank && kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules] && (
+          <motion.div
+            key={`rules-${lastDrawnCard.rank}`}
+            className="w-full max-w-xs rounded-lg border bg-card p-4"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ type: "spring", stiffness: 300, damping: 30 }}
+          >
+            <h3 className="font-bold text-lg mb-2">
+              {kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules].name}
+            </h3>
+            <p className="text-sm text-muted-foreground whitespace-pre-line">
+              {kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules].description}
+            </p>
+          </motion.div>
         )}
 
         {/* ── Round / Cards info ── */}
