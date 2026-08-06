@@ -89,9 +89,11 @@ Scope for this pass:
 
 ## Agent 2 — Frontend
 
-Owns: `apps/web` (Next.js, reusing existing UI), later `apps/mobile`, and
-consumes `@kings-cup/shared` (`packages/shared/` once added to your
-`pnpm-workspace.yaml`) for the WS client, tryCatch, retry, and logger.
+Owns: the existing Next.js app at the **repo root** (`app/`, `components/`,
+`lib/`, `public/`, root `package.json`) — there is no `apps/web` directory.
+A future `apps/mobile` may be added later. Consumes `@kings-cup/shared`
+(`packages/shared/`, already in `pnpm-workspace.yaml`) for the WS client,
+tryCatch, retry, and logger.
 
 Scope for this pass:
 - Use `GameSocket` from `@kings-cup/shared` as-is rather than writing a
@@ -114,7 +116,7 @@ Full surface area to remove, not just the obvious hooks:
 - Any `ConvexProvider`/`ConvexReactClient` wrapper (commonly in a root
   layout or a `providers.tsx`)
 - `useQuery`/`useMutation`/`useConvex` calls in components — find with
-  `grep -rn "convex/react\|useQuery\|useMutation\|useConvex" apps/web`
+  `grep -rn "convex/react\|useQuery\|useMutation\|useConvex" app components lib`
 - `convex` and `convex/react` (or similar) entries in `package.json`
 - Convex env vars (typically `NEXT_PUBLIC_CONVEX_URL` or similar) in
   `.env.local` / `.env.example`
