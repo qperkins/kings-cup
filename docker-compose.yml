@@ -1,0 +1,159 @@
+version: '3.8'
+
+services:
+  # Redis primary - main write target
+  redis-primary:
+    image: redis:7-alpine
+    command: redis-server --port 6379
+    ports:
+      - "6379:6379"
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Redis replica - read target for pub/sub
+  redis-replica:
+    image: redis:7-alpine
+    command: redis-server --port 6380 --replicaof redis-primary 6379
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Sentinel - monitors primary/replica, handles failover
+  redis-sentinel-1:
+    image: redis:7-alpine
+    command: >
+      sh -c "echo 'port 26379
+      sentinel monitor mymaster redis-primary 6379 2
+      sentinel down-after-milliseconds mymaster 5000
+      sentinel parallel-syncs mymaster 1
+      sentinel failover-timeout mymaster 10000' > /tmp/sentinel.conf &&
+      redis-sentinel /tmp/sentinel.conf"
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26379", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-sentinel-2:
+    image: redis:7-alpine
+    command: >
+      sh -c "echo 'port 26380
+      sentinel monitor mymaster redis-primary 6379 2
+      sentinel down-after-milliseconds mymaster 5000
+      sentinel parallel-syncs mymaster 1
+      sentinel failover-timeout mymaster 10000' > /tmp/sentinel.conf &&
+      redis-sentinel /tmp/sentinel.conf"
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26380", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis-sentinel-3:
+    image: redis:7-alpine
+    command: >
+      sh -c "echo 'port 26381
+      sentinel monitor mymaster redis-primary 6379 2
+      sentinel down-after-milliseconds mymaster 5000
+      sentinel parallel-syncs mymaster 1
+      sentinel failover-timeout mymaster 10000' > /tmp/sentinel.conf &&
+      redis-sentinel /tmp/sentinel.conf"
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+      redis-replica:
+        condition: service_healthy
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "redis-cli", "-p", "26381", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # App instance 1
+  app1:
+    build: .
+    environment:
+      - SENTINEL_HOSTS=redis-sentinel-1:26379,redis-sentinel-2:26380,redis-sentinel-3:26381
+      - SENTINEL_MASTER_NAME=mymaster
+    depends_on:
+      redis-sentinel-1:
+        condition: service_healthy
+      redis-sentinel-2:
+        condition: service_healthy
+      redis-sentinel-3:
+        condition: service_healthy
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # App instance 2
+  app2:
+    build: .
+    environment:
+      - SENTINEL_HOSTS=redis-sentinel-1:26379,redis-sentinel-2:26380,redis-sentinel-3:26381
+      - SENTINEL_MASTER_NAME=mymaster
+    depends_on:
+      redis-sentinel-1:
+        condition: service_healthy
+      redis-sentinel-2:
+        condition: service_healthy
+      redis-sentinel-3:
+        condition: service_healthy
+    networks:
+      - kings-cup
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Nginx load balancer - single entry point
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      app1:
+        condition: service_healthy
+      app2:
+        condition: service_healthy
+    networks:
+      - kings-cup
+
+networks:
+  kings-cup:
+    driver: bridge

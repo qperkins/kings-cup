@@ -1,0 +1,57 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# Node/Frontend (not needed in backend container)
+node_modules/
+.next/
+app/
+components/
+lib/
+public/
+*.js
+*.jsx
+*.ts
+*.tsx
+next.config.*
+tsconfig.json
+package.json
+pnpm-lock.yaml
+eslint.config.mjs
+postcss.config.mjs
+vitest.config.ts
+
+# Convex (being decommissioned)
+convex/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Documentation and plans
+*.md
+!requirements.txt
+
+# Test files
+verify_*.py
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

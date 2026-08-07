@@ -16,6 +16,7 @@ from .connection_manager import ConnectionManager
 from .engine import EngineError, EngineResult, apply_intent
 from .logging_utils import WideEvent, timed_field
 from .models import ActionIntent, JoinIntent, ServerEvent
+from .rate_limiter import check_connection_rate_limit, check_rate_limit
 from .redis_client import get_master
 from .retry import RetriesExhausted
 from .room_store import apply_with_lock
@@ -49,6 +50,19 @@ async def room_socket(websocket: WebSocket, room_id: str):
             raw = await websocket.receive_json()
 
             with WideEvent("message_processed", room_id=room_id) as event:
+                # Pre-join rate limiting: check by connection IP before player_id exists.
+                # This prevents join-spam DoS where an attacker floods join requests
+                # before successfully joining (each join acquires a room lock).
+                if player_id is None:
+                    conn_allowed = await check_connection_rate_limit(websocket)
+                    event["connection_rate_limited"] = not conn_allowed
+                    if not conn_allowed:
+                        event["outcome"] = "connection_rate_limited"
+                        await websocket.send_json(
+                            ServerEvent(type="error", payload={"detail": "Too many requests, slow down"}).model_dump()
+                        )
+                        continue
+
                 try:
                     intent = _intent_adapter.validate_python(raw)
                 except ValidationError as exc:
@@ -89,6 +103,17 @@ async def room_socket(websocket: WebSocket, room_id: str):
                     continue
 
                 event["player_id"] = player_id
+
+                # Rate limit check for all messages after initial join
+                if player_id is not None:
+                    allowed = await check_rate_limit(player_id)
+                    event["rate_limited"] = not allowed
+                    if not allowed:
+                        event["outcome"] = "rate_limited"
+                        await websocket.send_json(
+                            ServerEvent(type="error", payload={"detail": "Rate limit exceeded, slow down"}).model_dump()
+                        )
+                        continue
 
                 try:
                     with timed_field(event, "lock_wait"):
