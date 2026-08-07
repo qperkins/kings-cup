@@ -103,8 +103,11 @@ async def check_rate_limit(player_id: str) -> bool:
         redis = get_master()
         result = await redis.eval(
             _TOKEN_BUCKET_SCRIPT,
-            keys=[key],
-            args=[_BUCKET_CAPACITY, _REFILL_RATE_PER_SECOND, 60]
+            1,
+            key,
+            _BUCKET_CAPACITY,
+            _REFILL_RATE_PER_SECOND,
+            60,
         )
         return bool(result)
     
@@ -132,8 +135,11 @@ async def check_connection_rate_limit(websocket: WebSocket) -> bool:
         redis = get_master()
         result = await redis.eval(
             _TOKEN_BUCKET_SCRIPT,
-            keys=[key],
-            args=[20, 10.0, 60]  # 20 capacity, 10/sec refill, 60s TTL
+            1,
+            key,
+            20,
+            10.0,
+            60,
         )
         return bool(result)
     

@@ -43,6 +43,7 @@ async def health() -> dict:
 
 @app.websocket("/ws/{room_id}")
 async def room_socket(websocket: WebSocket, room_id: str):
+    await websocket.accept()
     player_id: str | None = None
 
     try:

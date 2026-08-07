@@ -43,7 +43,6 @@ class ConnectionManager:
         self._subscriptions: dict[str, asyncio.Task] = {}
 
     async def connect(self, room_id: str, player_id: str, ws: WebSocket) -> None:
-        await ws.accept()
         is_first_local_connection = room_id not in self._rooms or not self._rooms[room_id]
         self._rooms.setdefault(room_id, {})[player_id] = ws
 
