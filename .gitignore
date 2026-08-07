@@ -47,3 +47,5 @@ vitestDocs.md
 /docs/
 
 .venv/
+__pycache__/
+*.pyc
