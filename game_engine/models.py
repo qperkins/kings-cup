@@ -94,6 +94,45 @@ class GameState(BaseModel):
                 return p
         return None
 
+    def to_client_view(self) -> dict:
+        """Serialize game state for client consumption.
+        
+        Returns a dict containing the full game state visible to clients.
+        The caller (main.py) will add 'your_player_id' to this dict before
+        sending as a state_sync event - that field is documented here but
+        populated per-call rather than stored on GameState itself.
+        
+        Return shape:
+        {
+            'room_id': str,
+            'phase': 'lobby' | 'in_progress' | 'finished',
+            'players': [{'id': str, 'name': str, 'seat': int, 'connected': bool}, ...],
+            'current_turn_seat': int,
+            'kings_drawn': int,
+            'cards_remaining': int,
+            'drawn_pile_top': {'rank': str, 'suit': str, 'rule_text': str} | None,
+            
+            # Added by caller in main.py, not by this method:
+            'your_player_id': str  # which player in the roster is the receiving client
+        }
+        
+        Note: drawn_pile_top includes rule_text to match card_drawn event's shape.
+        Without it, reconnecting clients would need to reimplement rule_text()
+        mapping in TypeScript, duplicating business logic across the client boundary.
+        """
+        return {
+            "room_id": self.room_id,
+            "phase": self.phase.value,
+            "players": [p.model_dump() for p in self.players],
+            "current_turn_seat": self.current_turn_seat,
+            "kings_drawn": self.kings_drawn,
+            "cards_remaining": len(self.deck),
+            "drawn_pile_top": {
+                **self.drawn_pile[-1].model_dump(),
+                "rule_text": self.drawn_pile[-1].rule_text(),
+            } if self.drawn_pile else None,
+        }
+
 
 def new_deck() -> list[Card]:
     deck = [Card(rank=r, suit=s) for r in Rank for s in Suit]

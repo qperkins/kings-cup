@@ -97,8 +97,19 @@ async def room_socket(websocket: WebSocket, room_id: str):
                     event["player_id"] = player_id
                     if player_id:
                         await manager.connect(room_id, player_id, websocket)
+                        # Broadcast roster update to all clients
                         for e in result.events:
                             await manager.publish(room_id, e)
+                        
+                        # Send full state to this specific client for self-identification
+                        # Includes your_player_id so client knows which player in the roster is them
+                        payload = result.state.to_client_view()
+                        payload["your_player_id"] = player_id
+                        await manager.send_to(
+                            room_id, 
+                            player_id,
+                            ServerEvent(type="state_sync", payload=payload)
+                        )
                     event["outcome"] = "success"
                     continue
 
