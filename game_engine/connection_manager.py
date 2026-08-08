@@ -72,7 +72,7 @@ class ConnectionManager:
         async def _op():
             redis = get_master()
             receivers = await redis.publish(_channel(room_id), event.model_dump_json())
-            logger.info({"event": "pub_broadcast", "room_id": room_id, "event_type": event.type, "receivers": receivers})
+            logger.info(json.dumps({"event": "pub_broadcast", "room_id": room_id, "event_type": event.type, "receivers": receivers}))
 
         await retry_with_backoff(_op, max_attempts=4, retryable_exceptions=_TRANSIENT_REDIS_ERRORS)
 
@@ -117,6 +117,6 @@ class ConnectionManager:
                 delivered += 1
             except Exception:
                 stale.append(player_id)
-        logger.info({"event": "pub_deliver", "room_id": room_id, "event_type": event.type, "delivered": delivered, "stale": len(stale)})
+        logger.info(json.dumps({"event": "pub_deliver", "room_id": room_id, "event_type": event.type, "delivered": delivered, "stale": len(stale)}))
         for player_id in stale:
             self.disconnect(room_id, player_id)

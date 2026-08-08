@@ -113,6 +113,20 @@ export class GameSocket {
       const event = result.data;
       for (const handler of this.listeners.get(event.type) ?? []) handler(event.payload);
     };
+
+    socket.onclose = () => {
+      console.warn("[GameSocket] connection closed, auto-reconnecting...");
+      this.ws = null;
+      // Auto-reconnect after 1s when connection drops (e.g., network switch)
+      setTimeout(() => {
+        this.connect().then((result) => {
+          if (result.success && GameSocket.getResumeToken()) {
+            // Auto-rejoin with resume_token to reconnect to same player
+            this.send({ type: "join", resume_token: GameSocket.getResumeToken() });
+          }
+        });
+      }, 1000);
+    };
   }
 
   /** Player identity persisted for reconnect — sent as resume_token on the
