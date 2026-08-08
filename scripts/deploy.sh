@@ -14,7 +14,7 @@ cd "$REPO_DIR"
 echo "==> Pulling latest code"
 git fetch origin main
 git checkout main
-git pull origin main
+git reset --hard origin/main
 
 echo "==> Stopping existing containers"
 docker compose -f "$COMPOSE_FILE" down
