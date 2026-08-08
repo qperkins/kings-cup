@@ -71,7 +71,8 @@ class ConnectionManager:
         discovery time to find the newly-promoted master."""
         async def _op():
             redis = get_master()
-            await redis.publish(_channel(room_id), event.model_dump_json())
+            receivers = await redis.publish(_channel(room_id), event.model_dump_json())
+            logger.info({"event": "pub_broadcast", "room_id": room_id, "event_type": event.type, "receivers": receivers})
 
         await retry_with_backoff(_op, max_attempts=4, retryable_exceptions=_TRANSIENT_REDIS_ERRORS)
 
@@ -109,10 +110,13 @@ class ConnectionManager:
     async def _deliver_local(self, room_id: str, event: ServerEvent) -> None:
         room = self._rooms.get(room_id, {})
         stale: list[str] = []
+        delivered = 0
         for player_id, ws in room.items():
             try:
                 await ws.send_json(event.model_dump())
+                delivered += 1
             except Exception:
                 stale.append(player_id)
+        logger.info({"event": "pub_deliver", "room_id": room_id, "event_type": event.type, "delivered": delivered, "stale": len(stale)})
         for player_id in stale:
             self.disconnect(room_id, player_id)
