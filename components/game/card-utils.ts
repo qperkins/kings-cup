@@ -2,7 +2,7 @@
 // Card data types and SVG-sprite helpers
 // ---------------------------------------------------------------------------
 
-/** Shape of a card object as stored in the Convex game state. */
+/** Shape of a card object from the game engine wire protocol. */
 export type CardData = {
   id: string;
   rank: string;

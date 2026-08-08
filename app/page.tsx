@@ -1,8 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useMutation } from "convex/react";
-import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -13,10 +11,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-function generateUserId(): string {
-  return `user_${Math.random().toString(36).substring(2, 11)}`;
-}
-
 function generateRoomCode(): string {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let code = "";
@@ -26,25 +20,13 @@ function generateRoomCode(): string {
   return code;
 }
 
-function getUserId(): string {
-  if (typeof window === "undefined") return generateUserId();
-  const stored = localStorage.getItem("kingscup_user_id");
-  if (stored) return stored;
-  const newId = generateUserId();
-  localStorage.setItem("kingscup_user_id", newId);
-  return newId;
-}
-
 export default function HomePage() {
   const [playerName, setPlayerName] = useState("");
   const [roomCode, setRoomCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const createRoom = useMutation(api.room.createRoom);
-  const joinRoom = useMutation(api.room.joinRoom);
-
-  const handleCreateRoom = useCallback(async () => {
+  const handleCreateRoom = useCallback(() => {
     if (!playerName.trim()) {
       setError("Please enter your name first");
       return;
@@ -53,28 +35,11 @@ export default function HomePage() {
     setError(null);
     setIsLoading(true);
 
-    try {
-      const userId = getUserId();
-      const newRoomCode = generateRoomCode();
+    const newRoomCode = generateRoomCode();
+    window.location.href = `/room/${newRoomCode}?name=${encodeURIComponent(playerName.trim())}`;
+  }, [playerName]);
 
-      await createRoom({
-        userId,
-        roomId: newRoomCode,
-        playerName: playerName.trim(),
-      });
-
-      // Navigate to the room lobby
-      window.location.href = `/room/${newRoomCode}?name=${encodeURIComponent(playerName.trim())}`;
-    } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : "Failed to create room";
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [playerName, createRoom]);
-
-  const handleJoinRoom = useCallback(async () => {
+  const handleJoinRoom = useCallback(() => {
     if (!playerName.trim()) {
       setError("Please enter your name first");
       return;
@@ -88,30 +53,9 @@ export default function HomePage() {
     setError(null);
     setIsLoading(true);
 
-    try {
-      const userId = getUserId();
-      const normalizedCode = roomCode.trim().toUpperCase();
-
-      await joinRoom({
-        userId,
-        roomId: normalizedCode,
-        playerName: playerName.trim(),
-      });
-
-      // Navigate to the room lobby
-      window.location.href = `/room/${normalizedCode}?name=${encodeURIComponent(playerName.trim())}`;
-    } catch (err) {
-      if (err instanceof Error && err.message.includes("ROOM_404")) {
-        setError("Room not found. Check the code and try again.");
-      } else {
-        const errorMessage =
-          err instanceof Error ? err.message : "Failed to join room";
-        setError(errorMessage);
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  }, [playerName, roomCode, joinRoom]);
+    const normalizedCode = roomCode.trim().toUpperCase();
+    window.location.href = `/room/${normalizedCode}?name=${encodeURIComponent(playerName.trim())}`;
+  }, [playerName, roomCode]);
 
   const canJoin = playerName.trim().length > 0 && roomCode.trim().length > 0;
   const canCreate = playerName.trim().length > 0;
@@ -128,12 +72,8 @@ export default function HomePage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Player Name Input */}
           <div className="space-y-2">
-            <label
-              htmlFor="playerName"
-              className="text-sm font-medium"
-            >
+            <label htmlFor="playerName" className="text-sm font-medium">
               Your Name
             </label>
             <Input
@@ -146,13 +86,9 @@ export default function HomePage() {
             />
           </div>
 
-          {/* Join Room Section */}
           <div className="space-y-3">
             <div className="space-y-2">
-              <label
-                htmlFor="roomCode"
-                className="text-sm font-medium"
-              >
+              <label htmlFor="roomCode" className="text-sm font-medium">
                 Room Code
               </label>
               <Input
@@ -174,7 +110,6 @@ export default function HomePage() {
             </Button>
           </div>
 
-          {/* Divider */}
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t" />
@@ -184,7 +119,6 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Create Room Section */}
           <Button
             onClick={handleCreateRoom}
             disabled={!canCreate || isLoading}
@@ -194,7 +128,6 @@ export default function HomePage() {
             {isLoading ? "Creating..." : "Create New Room"}
           </Button>
 
-          {/* Error Message */}
           {error && (
             <div className="p-3 rounded-md bg-destructive/10 border border-destructive/50 text-destructive text-sm text-center">
               {error}

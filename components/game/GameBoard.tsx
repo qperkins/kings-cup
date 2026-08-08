@@ -1,9 +1,7 @@
 "use client";
 
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { useMutation } from "convex/react";
+import { useState, useCallback, useMemo } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
-import { api } from "@/convex/_generated/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -55,6 +53,7 @@ interface GameBoardProps {
   roomCode: string;
   userId: string;
   gameState: GameState;
+  onDrawCard: () => Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,30 +142,11 @@ When the fourth King is drawn, the player who drew that fourth King must drink t
 // Component
 // ---------------------------------------------------------------------------
 
-export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
+export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
   const { game, currentPlayer, lastDrawnCard, lastCardRule } = gameState;
 
-  const drawCardMutation = useMutation(api.game.drawCard);
-  const endTurnMutation = useMutation(api.game.endTurn);
-  const restartGameMutation = useMutation(api.game.restartGame);
-
-  // Local UI state
-  const [drawnThisTurn, setDrawnThisTurn] = useState(false);
   const [isDrawing, setIsDrawing] = useState(false);
-  const [isEndingTurn, setIsEndingTurn] = useState(false);
-  const [isRestarting, setIsRestarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Track turn index so we can detect turn changes and reset local state
-  const prevTurnIndexRef = useRef<number | null>(null);
-  const turnIndex = game?.turnIndex ?? 0;
-
-  useEffect(() => {
-    if (prevTurnIndexRef.current !== null && prevTurnIndexRef.current !== turnIndex) {
-      setDrawnThisTurn(false);
-    }
-    prevTurnIndexRef.current = turnIndex;
-  }, [turnIndex]);
 
   // Derived values (computed without hooks, safe to use before/after return)
   const isMyTurn = currentPlayer?.userId === userId;
@@ -174,7 +154,8 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
   const hostId = lobbySnapshot.hostId ?? (game?.turnOrder?.[0] ?? null);
   const isHost = hostId === userId;
   const kingsDrawn = game?.kingsDrawn ?? 0;
-  const deckRemaining = (game?.deck?.length ?? 52) - (game?.drawIndex ?? 0);
+  // WS model doesn't ship full deck — derive count from drawIndex (52-card deck).
+  const deckRemaining = Math.max(0, 52 - (game?.drawIndex ?? 0));
   const cardsDrawn = game?.drawIndex ?? 0;
   const roundNumber = game?.roundNumber ?? 1;
   const isGameOver = kingsDrawn >= 4;
@@ -191,67 +172,22 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
   // ── Handlers (all hooks must be above the early return) ──
 
   const handleDraw = useCallback(async () => {
-    if (!isMyTurn || drawnThisTurn || isDrawing) return;
+    if (!isMyTurn || isDrawing) return;
     setIsDrawing(true);
     setError(null);
 
     try {
-      await drawCardMutation({
-        roomId: roomCode,
-        userId,
-      });
-
-      setDrawnThisTurn(true);
+      await onDrawCard();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to draw card";
       setError(msg);
     } finally {
       setIsDrawing(false);
     }
-  }, [isMyTurn, drawnThisTurn, isDrawing, drawCardMutation, roomCode, userId]);
-
-  const handleEndTurn = useCallback(async () => {
-    if (!isMyTurn || !drawnThisTurn || isEndingTurn) return;
-    setIsEndingTurn(true);
-    setError(null);
-
-    try {
-      await endTurnMutation({
-        roomId: roomCode,
-        userId,
-      });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to end turn";
-      setError(msg);
-    } finally {
-      setIsEndingTurn(false);
-    }
-  }, [isMyTurn, drawnThisTurn, isEndingTurn, endTurnMutation, roomCode, userId]);
-
-  const handlePlayAgain = useCallback(async () => {
-    setIsRestarting(true);
-    setError(null);
-
-    try {
-      await restartGameMutation({
-        roomId: roomCode,
-        userId,
-      });
-      setDrawnThisTurn(false);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to restart";
-      setError(msg);
-    } finally {
-      setIsRestarting(false);
-    }
-  }, [restartGameMutation, roomCode, userId]);
+  }, [isMyTurn, isDrawing, onDrawCard]);
 
   // ── Early return (after all hooks) ──
   if (!game) return null;
-
-  // Determine drawn card display data - show for ALL players
-  const drawnCard: CardData | null =
-    drawnThisTurn && lastDrawnCard ? lastDrawnCard : null;
 
   const drawnCardRank = lastDrawnCard?.rank ?? null;
   const drawnCardSuit = lastDrawnCard?.suit ?? null;
@@ -275,9 +211,7 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
         {/* ── Turn indicator text ── */}
         <p className="text-sm text-muted-foreground text-center">
           {isMyTurn
-            ? drawnThisTurn
-              ? "Your turn \u2014 end turn when ready"
-              : "Your turn \u2014 draw a card!"
+            ? "Your turn \u2014 draw a card!"
             : `Waiting for ${currentPlayer?.name ?? "someone"} to play...`}
         </p>
 
@@ -298,12 +232,8 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
             <div className="relative w-[9.8rem]">
               <PlayingCard
                 faceDown
-                disableHover={!isMyTurn || drawnThisTurn}
-                onClick={
-                  isMyTurn && !drawnThisTurn && !isDrawing
-                    ? handleDraw
-                    : undefined
-                }
+                disableHover={!isMyTurn}
+                onClick={isMyTurn && !isDrawing ? handleDraw : undefined}
               />
             </div>
             <p className="text-center text-xs text-muted-foreground mt-1">
@@ -314,28 +244,15 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
           {/* Discard / drawn card area */}
           <div className="relative w-[9.8rem] min-h-[224px] flex items-center justify-center">
             <AnimatePresence mode="wait">
-              {drawnCard ? (
+              {lastDrawnCard ? (
                 <motion.div
-                  key={drawnCard.id}
+                  key={lastDrawnCard.id}
                   initial={{ x: -170, rotateY: 180, opacity: 0 }}
                   animate={{ x: 0, rotateY: 0, opacity: 1 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={CARD_SPRING}
                   className="w-[9.8rem]"
                   style={{ perspective: 800 }}
-                >
-                  <PlayingCard
-                    rank={drawnCard.rank}
-                    suit={drawnCard.suit}
-                    disableHover
-                  />
-                </motion.div>
-              ) : lastDrawnCard ? (
-                <motion.div
-                  key={`last-${lastDrawnCard.id}`}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 0.5 }}
-                  className="w-[9.8rem]"
                 >
                   <PlayingCard
                     rank={lastDrawnCard.rank}
@@ -387,18 +304,10 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
           <div className="flex gap-3 w-full max-w-xs">
             <Button
               onClick={handleDraw}
-              disabled={drawnThisTurn || isDrawing || deckRemaining <= 0}
-              className="flex-1"
+              disabled={isDrawing || deckRemaining <= 0}
+              className="w-full"
             >
               {isDrawing ? "Drawing..." : "Draw Card"}
-            </Button>
-            <Button
-              onClick={handleEndTurn}
-              disabled={!drawnThisTurn || isEndingTurn}
-              variant="outline"
-              className="flex-1"
-            >
-              {isEndingTurn ? "Ending..." : "End Turn"}
             </Button>
           </div>
         )}
@@ -448,8 +357,6 @@ export function GameBoard({ roomCode, userId, gameState }: GameBoardProps) {
             roundNumber={roundNumber}
             cardsDrawn={cardsDrawn}
             isHost={isHost}
-            onPlayAgain={handlePlayAgain}
-            isRestarting={isRestarting}
           />
         )}
       </AnimatePresence>
