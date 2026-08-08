@@ -4,13 +4,13 @@ An open-source King's Cup drinking game for the web — live at **[kxc.cards](ht
 
 I built a Next.js frontend and a FastAPI game engine backend that talk over WebSocket. The interesting part isn't the card rules — it's everything around keeping a room in sync when connections drop, phones lock, and six people share one WiFi router.
 
-The target audience makes that pressure real. People playing at a party have almost no patience for a clunky, slow experience — they'll drop the app and go back to real cards before the round finishes. A smooth, fast feel wasn't something I could polish in at the end; it had to be built into the architecture from the start.
+The target audience makes that pressure real. People (especially intoxicated) playing at a party have almost no patience for a clunky, slow experience — they'll drop the app and go back to real cards before the round finishes. A smooth, fast feel wasn't something I could polish in at the end; it had to be built into the architecture from the start.
 
 ---
 
 ## Why I Chose This Project
 
-I chose this project because it mirrors problems major companies have to solve in real-time multiplayer. King's Cup is a game where multiple users connect to a specific room and expect a fast, low-latency experience. Most of them are on mobile, and they disconnect constantly — screen saver kicks in, they switch apps, WiFi hiccups. I wanted something I could point to that shows how I'd handle client *and* server-side disconnects without treating them as edge cases.
+I chose this project because it mirrors problems major companies have to solve with real-time applications. King's Cup is a game where multiple users connect to a specific room and expect a fast, low-latency experience. Most of them are on mobile, and they disconnect constantly — screen saver kicks in, they switch apps, WiFi hiccups. I wanted something I could point to that shows how I'd handle client and server-side disconnects without treating them as edge cases.
 
 A whole table playing in person often shares one public IP. That turned out to matter more than I expected when I added rate limiting.
 
@@ -35,7 +35,7 @@ Wire protocol, idempotency rules, and coding conventions live in [`CONTRACT.md`]
 
 ### I prioritized availability over raw scalability
 
-For this scope, I cared more about surviving failure than optimizing for millions of users on day one. In dev I run Redis Sentinel with two app instances behind Nginx so I can actually test failover — kill the primary, draw a card, see if retries hold up. Production on Oracle is deliberately simpler: one Redis, one app. I traded HA complexity for a free tier I can afford to leave running. The retry layer still handles transient Redis blips, but a hard Redis outage in prod would hurt until I promote Sentinel there too.
+For this scope, I cared more about surviving failure than optimizing for millions of users on day one. In dev I run Redis Sentinel with two app instances behind Nginx so I can actually test failover — kill the primary, draw a card, see if retries hold up. Production on Oracle is deliberately simpler: one Redis, one app. I traded HA complexity for a free tier I can leave running since this just a side project at the end of the day. The retry layer still handles transient Redis blips, but a hard Redis outage in prod would hurt until I promote Sentinel there too.
 
 ### I kept game rules server-side
 
@@ -72,19 +72,20 @@ In dev I go through Sentinel (`SENTINEL_HOSTS`). In prod I set `REDIS_DIRECT_URL
 
 ## What I'd Do Next
 
-**What this can actually handle today:** I want to be honest about the numbers. "100k users" was aspirational — the code doesn't support that on what's running in prod right now.
+**What this can actually handle today:**
 
 On the current Oracle setup (1 OCPU, single uvicorn process, single Redis), I'd expect roughly **500–2,000 concurrent WebSocket connections** before memory, CPU, or Redis pub/sub pressure shows up in latency. That's on the order of **~100–400 active game rooms** at typical party sizes (4–8 players). The architecture is room-based and lightweight per connection, but everything still flows through one app instance and one Redis primary — that's the ceiling.
 
-**What the code is actually built to scale toward:** The pub/sub fan-out and per-room locking in [`connection_manager.py`](game_engine/connection_manager.py) and [`room_store.py`](game_engine/room_store.py) mean I could add more app replicas behind Nginx without rewriting the game logic. If I moved to a larger Redis instance and ran several app instances, I'd estimate **~5,000–15,000 concurrent connections** before Redis itself becomes the bottleneck — still not 100k, but a real step up from where prod sits today.
+**What the code is actually built to scale toward:** The pub/sub fan-out and per-room locking in [`connection_manager.py`](game_engine/connection_manager.py) and [`room_store.py`](game_engine/room_store.py) mean I could add more app replicas behind Nginx without rewriting the game logic. If I moved to a larger Redis instance and ran several app instances, I'd estimate **~5,000–15,000 concurrent connections** before Redis itself becomes the bottleneck.
 
-**What 100k concurrent would actually require:** Global room partitioning / sharding — routing `room_id` to regional Redis clusters — plus many app instances per region. That's out of scope for this project. I also skipped a full observability pipeline; WideEvent structured logs plus `docker compose logs` are enough for me right now.
+**What 100k concurrent would require:** Global room partitioning / sharding — routing `room_id` to regional Redis clusters — plus many app instances per region. That's out of scope for this project. I also skipped a full observability pipeline; WideEvent structured logs plus `docker compose logs` are enough for me right now.
 
 **On my list:**
 
 - Client-side stale-state detection and resync (there's a TODO in [`main.py`](game_engine/main.py) for when pub/sub fails mid-failover)
 - Automated frontend E2E in CI — I have a manual workflow that smoke-tests `wss://api.kxc.cards` today
 - Promote Sentinel + multiple app instances to production if I outgrow the single-node ceiling
+- Add mobile app versions using React Native
 
 ---
 
