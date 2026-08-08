@@ -1,6 +1,6 @@
 # King's Cup
 
-An open-source King's Cup drinking game for the web — live at **[kxc.cards](https://kxc.cards)** (`wss://kxc.cards`).
+An open-source King's Cup drinking game for the web — live at **[kxc.cards](https://kxc.cards)** (backend: `wss://api.kxc.cards`).
 
 I built a Next.js frontend and a FastAPI game engine backend that talk over WebSocket. The interesting part isn't the card rules — it's everything around keeping a room in sync when connections drop, phones lock, and six people share one WiFi router.
 
@@ -25,7 +25,7 @@ I split the project into a Next.js frontend and a Python game engine (`game_engi
 | Frontend | Next.js, Tailwind, shadcn/ui, Motion | Room UI; WebSocket client via `@kings-cup/shared` |
 | Backend | FastAPI, Redis, Nginx | Authoritative game state, pub/sub fan-out, SSL |
 | Dev | Redis Sentinel, 2 app instances ([`docker-compose.yml`](docker-compose.yml)) | Failover and retry testing |
-| Prod | Single Redis, 1 app ([`docker-compose.prod.yml`](docker-compose.prod.yml)) | Oracle Cloud free tier at kxc.cards |
+| Prod | Single Redis, 1 app ([`docker-compose.prod.yml`](docker-compose.prod.yml)) | Oracle Cloud free tier at api.kxc.cards |
 
 Wire protocol, idempotency rules, and coding conventions live in [`CONTRACT.md`](CONTRACT.md). CI/CD and production setup are in [`DEPLOYMENT.md`](DEPLOYMENT.md).
 
@@ -83,7 +83,7 @@ On the current Oracle setup (1 OCPU, single uvicorn process, single Redis), I'd 
 **On my list:**
 
 - Client-side stale-state detection and resync (there's a TODO in [`main.py`](game_engine/main.py) for when pub/sub fails mid-failover)
-- Automated frontend E2E in CI — I have a manual workflow that smoke-tests `wss://kxc.cards` today
+- Automated frontend E2E in CI — I have a manual workflow that smoke-tests `wss://api.kxc.cards` today
 - Promote Sentinel + multiple app instances to production if I outgrow the single-node ceiling
 
 ---
@@ -131,7 +131,7 @@ Verification scripts: `scripts/verification/`.
 
 ## CI/CD
 
-I deploy to kxc.cards on Oracle's free ARM tier.
+I deploy the backend to api.kxc.cards on Oracle's free ARM tier (frontend on Vercel).
 
 - **Test** — every push/PR; pytest with a Redis service
 - **Deploy** — push to `main`; ARM64 build → public GHCR image → SSH deploy

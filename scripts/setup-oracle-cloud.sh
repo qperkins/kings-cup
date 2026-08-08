@@ -8,7 +8,7 @@ EMAIL="${2:-}"
 
 if [[ -z "$DOMAIN" || -z "$EMAIL" ]]; then
   echo "Usage: $0 <domain> <letsencrypt-email>"
-  echo "Example: $0 kxc.cards admin@example.com"
+  echo "Example: $0 api.kxc.cards admin@example.com"
   exit 1
 fi
 
@@ -64,8 +64,8 @@ if [[ ! -d "$REPO_DIR/.git" ]]; then
 fi
 
 echo "==> Configuring nginx SSL paths for domain: $DOMAIN"
-if [[ "$DOMAIN" != "kxc.cards" ]]; then
-  sed -i "s/kxc.cards/${DOMAIN}/g" "$REPO_DIR/nginx/nginx.prod.conf"
+if [[ "$DOMAIN" != "api.kxc.cards" ]]; then
+  sed -i "s/api.kxc.cards/${DOMAIN}/g" "$REPO_DIR/nginx/nginx.prod.conf"
 fi
 
 echo "==> Obtaining Let's Encrypt certificate"

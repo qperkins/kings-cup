@@ -27,7 +27,7 @@ Development uses the full Sentinel stack in `docker-compose.yml`.
 SSH into the instance and run:
 
 ```bash
-sudo bash scripts/setup-oracle-cloud.sh kxc.cards you@example.com
+sudo bash scripts/setup-oracle-cloud.sh api.kxc.cards you@example.com
 ```
 
 This script:
@@ -35,7 +35,7 @@ This script:
 - Installs Docker and docker compose plugin
 - Opens firewall ports 22, 80, 443
 - Clones the repo to `/opt/kings-cup-backend`
-- Replaces SSL certificate paths in `nginx/nginx.prod.conf` for `kxc.cards`
+- Replaces SSL certificate paths in `nginx/nginx.prod.conf` for `api.kxc.cards` (backend)
 - Obtains a Let's Encrypt certificate via certbot standalone
 - Verifies certbot auto-renewal is enabled (systemd timer or cron)
 - Starts the production stack
@@ -91,8 +91,8 @@ failures exit immediately with an error.
 
 Manual trigger via **Actions → E2E Tests → Run workflow**:
 
-- Provide `ws_base` (e.g. `wss://kxc.cards`)
-- Optionally provide `health_url` (e.g. `https://kxc.cards/health`)
+- Provide `ws_base` (e.g. `wss://api.kxc.cards`)
+- Optionally provide `health_url` (e.g. `https://api.kxc.cards/health`)
 
 Runs WebSocket smoke tests against production.
 

@@ -7,12 +7,12 @@ on:
         description: "WebSocket base URL"
         required: true
         type: string
-        default: "wss://kxc.cards"
+        default: "wss://api.kxc.cards"
       health_url:
         description: "Health check URL"
         required: false
         type: string
-        default: "https://kxc.cards/health"
+        default: "https://api.kxc.cards/health"
 
 jobs:
   ws-smoke:
