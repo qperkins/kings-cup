@@ -119,11 +119,11 @@ export class GameSocket {
    * next join so the server rejoins the same seat instead of creating a
    * new player. See game_engine/engine.py's _handle_join. */
   static getResumeToken(): string | null {
-    return typeof window !== "undefined" ? localStorage.getItem(RESUME_TOKEN_KEY) : null;
+    return typeof window !== "undefined" ? sessionStorage.getItem(RESUME_TOKEN_KEY) : null;
   }
 
   static saveResumeToken(playerId: string): void {
-    if (typeof window !== "undefined") localStorage.setItem(RESUME_TOKEN_KEY, playerId);
+    if (typeof window !== "undefined") sessionStorage.setItem(RESUME_TOKEN_KEY, playerId);
   }
 }
 

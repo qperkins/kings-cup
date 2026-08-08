@@ -17,9 +17,9 @@ interface GameOverOverlayProps {
   /** Whether the local user is the host */
   isHost: boolean;
   /** Called when the host clicks Play Again */
-  onPlayAgain: () => void;
-  /** True while the restartGame mutation is in flight */
-  isRestarting: boolean;
+  onPlayAgain?: () => void;
+  /** True while the restart intent is in flight */
+  isRestarting?: boolean;
 }
 
 export function GameOverOverlay({
@@ -118,7 +118,7 @@ export function GameOverOverlay({
               </div>
             </div>
 
-            {isHost ? (
+            {isHost && onPlayAgain ? (
               <Button
                 onClick={onPlayAgain}
                 disabled={isRestarting}
@@ -126,6 +126,10 @@ export function GameOverOverlay({
               >
                 {isRestarting ? "Restarting..." : "Play Again"}
               </Button>
+            ) : isHost ? (
+              <p className="text-sm text-muted-foreground text-center">
+                Play Again coming soon
+              </p>
             ) : (
               <p className="text-sm text-muted-foreground text-center">
                 Waiting for the host to restart...

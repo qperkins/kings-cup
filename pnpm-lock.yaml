@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@kings-cup/shared':
+        specifier: workspace:*
+        version: link:packages/shared
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -81,6 +84,8 @@ importers:
       vitest:
         specifier: ^4.0.18
         version: 4.0.18(@edge-runtime/vm@5.0.0)(@types/node@20.19.31)(jiti@2.6.1)(lightningcss@1.30.2)(msw@2.12.10(@types/node@20.19.31)(typescript@5.9.3))
+
+  packages/shared: {}
 
 packages:
 
