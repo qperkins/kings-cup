@@ -57,6 +57,15 @@ elif command -v firewall-cmd >/dev/null 2>&1; then
   firewall-cmd --reload
 fi
 
+echo "==> Fixing Oracle default iptables (insert rules before REJECT)"
+if iptables -L INPUT -n | grep -q "reject-with icmp-host-prohibited"; then
+  iptables -I INPUT $(iptables -L INPUT --line-numbers | grep "reject-with icmp-host-prohibited" | head -1 | cut -d' ' -f1) -p tcp --dport 80 -j ACCEPT
+  iptables -I INPUT $(iptables -L INPUT --line-numbers | grep "reject-with icmp-host-prohibited" | head -1 | cut -d' ' -f1) -p tcp --dport 443 -j ACCEPT
+  mkdir -p /etc/iptables
+  iptables-save > /etc/iptables/rules.v4
+  echo "iptables rules persisted to /etc/iptables/rules.v4"
+fi
+
 echo "==> Cloning repository"
 mkdir -p "$REPO_DIR"
 if [[ ! -d "$REPO_DIR/.git" ]]; then
