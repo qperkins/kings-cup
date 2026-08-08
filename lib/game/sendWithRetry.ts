@@ -173,6 +173,16 @@ export function deliverErrorToPendingVerdict(
   return true;
 }
 
+/** Route a success event to the active verdict waiter. Returns true if consumed. */
+export function deliverSuccessToPendingVerdict(
+  getPending: () => PendingVerdict | null,
+): boolean {
+  const pending = getPending();
+  if (!pending) return false;
+  pending.resolve({ kind: "ok" });
+  return true;
+}
+
 /** Clear timer and resolve an in-flight waiter immediately (disconnect/unmount). */
 export function cancelPendingVerdict(
   getPending: () => PendingVerdict | null,

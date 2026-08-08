@@ -11,6 +11,7 @@ import {
   cancelPendingVerdict,
   createVerdictWaiter,
   deliverErrorToPendingVerdict,
+  deliverSuccessToPendingVerdict,
   isRetryableServerError,
   sendIntentWithRetry,
   type PendingVerdict,
@@ -29,6 +30,7 @@ const EVENT_TYPES = [
   "card_drawn",
   "turn_advanced",
   "game_finished",
+  "action_success",
   "error",
 ] as const;
 
@@ -76,6 +78,11 @@ export function useRoomSocket(roomId: string, playerName: string) {
           GameSocket.saveResumeToken(yourId);
           setPlayerId(yourId);
         }
+      }
+
+      if (eventType === "action_success") {
+        deliverSuccessToPendingVerdict(getPendingVerdict);
+        return;
       }
 
       if (eventType === "error") {
