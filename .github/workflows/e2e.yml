@@ -1,0 +1,52 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      ws_base:
+        description: "WebSocket base URL"
+        required: true
+        type: string
+        default: "wss://api.kxc.cards"
+      health_url:
+        description: "Health check URL"
+        required: false
+        type: string
+        default: "https://api.kxc.cards/health"
+
+jobs:
+  ws-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install smoke test dependencies
+        run: pip install websockets
+
+      - name: Run WebSocket smoke test
+        run: python scripts/verification/ws-e2e-smoke.py "${{ inputs.ws_base }}"
+
+  ws-smoke-node:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Run Node WebSocket smoke test
+        run: node scripts/verification/ws-e2e-smoke.mjs "${{ inputs.ws_base }}"
+
+  health-check:
+    if: inputs.health_url != ''
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify production health endpoint
+        run: |
+          curl -sf "${{ inputs.health_url }}"
+          echo "Health check passed"
