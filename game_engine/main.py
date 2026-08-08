@@ -98,12 +98,37 @@ async def room_socket(websocket: WebSocket, room_id: str):
                     event["player_id"] = player_id
                     if player_id:
                         await manager.connect(room_id, player_id, websocket)
-                        # Broadcast roster update to all clients
-                        for e in result.events:
-                            await manager.publish(room_id, e)
                         
-                        # Send full state to this specific client for self-identification
-                        # Includes your_player_id so client knows which player in the roster is them
+                        # Broadcast roster update to all clients.
+                        # CRITICAL: This can fail mid-Sentinel-failover. If it does, the join
+                        # succeeded (state saved) but room-wide notification didn't land.
+                        # Other players stay stale until next successful event. The requesting
+                        # client gets state_sync below as a fallback.
+                        # TODO: Consider having other clients detect staleness and request state_sync.
+                        # Note: publish failures partway through a multi-event batch (e.g. reconnect
+                        # producing 2+ events) mean some clients may receive a partial broadcast
+                        # rather than none at all — same class of gap, worth knowing this distinction
+                        # exists if debugging inconsistent client state during a failover window.
+                        try:
+                            for e in result.events:
+                                await manager.publish(room_id, e)
+                        except RetriesExhausted as exc:
+                            event.update(
+                                outcome="publish_failed",
+                                error={"type": "RetriesExhausted", "message": str(exc)}
+                            )
+                            await websocket.send_json(
+                                ServerEvent(
+                                    type="error",
+                                    payload={"detail": "Join succeeded but failed to notify room, you may see stale state"}
+                                ).model_dump()
+                            )
+                            # Fallthrough to send state_sync below - ensures this client sees current state
+                        
+                        # Send full state to this specific client for self-identification.
+                        # Includes your_player_id so client knows which player in the roster is them.
+                        # Sent whether publish succeeded or failed - if failed, this is the fallback
+                        # that ensures the requesting client at least sees the current state.
                         payload = result.state.to_client_view()
                         payload["your_player_id"] = player_id
                         await manager.send_to(
@@ -111,7 +136,9 @@ async def room_socket(websocket: WebSocket, room_id: str):
                             player_id,
                             ServerEvent(type="state_sync", payload=payload)
                         )
-                    event["outcome"] = "success"
+                    
+                    if event.fields.get("outcome") != "publish_failed":
+                        event["outcome"] = "success"
                     continue
 
                 event["player_id"] = player_id
@@ -146,10 +173,42 @@ async def room_socket(websocket: WebSocket, room_id: str):
                     )
                     continue
 
-                for e in result.events:
-                    await manager.publish(room_id, e)
-                event["events_emitted"] = [e.type for e in result.events]
-                event["outcome"] = "success"
+                # Action succeeded, broadcast to room.
+                # CRITICAL: publish can fail mid-Sentinel-failover. If it does, the action
+                # succeeded (state saved) but room-wide notification didn't land. Other players
+                # stay stale until next successful event. Requesting client gets state_sync as
+                # a fallback to ensure they at least see current state.
+                # TODO: Consider having other clients detect staleness and request state_sync.
+                # Note: publish failures partway through a multi-event batch (e.g. reconnect
+                # producing 2+ events) mean some clients may receive a partial broadcast
+                # rather than none at all — same class of gap, worth knowing this distinction
+                # exists if debugging inconsistent client state during a failover window.
+                try:
+                    for e in result.events:
+                        await manager.publish(room_id, e)
+                    event["events_emitted"] = [e.type for e in result.events]
+                    event["outcome"] = "success"
+                except RetriesExhausted as exc:
+                    event.update(
+                        outcome="publish_failed",
+                        error={"type": "RetriesExhausted", "message": str(exc)},
+                        events_emitted=[e.type for e in result.events]
+                    )
+                    await websocket.send_json(
+                        ServerEvent(
+                            type="error",
+                            payload={"detail": "Action succeeded but failed to notify room, requesting resync"}
+                        ).model_dump()
+                    )
+                    # Send state_sync fallback to requesting client so they see current state
+                    # even though room-wide broadcast failed.
+                    payload = result.state.to_client_view()
+                    payload["your_player_id"] = player_id
+                    await manager.send_to(
+                        room_id,
+                        player_id,
+                        ServerEvent(type="state_sync", payload=payload)
+                    )
 
     except WebSocketDisconnect:
         with WideEvent("player_disconnected", room_id=room_id, player_id=player_id) as event:
