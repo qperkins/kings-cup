@@ -23,6 +23,7 @@ from fastapi import WebSocket
 from .models import ServerEvent
 from .redis_client import get_master, get_replica
 from .retry import retry_with_backoff
+from .logging_utils import WideEvent
 from redis.exceptions import ConnectionError as RedisConnectionError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
@@ -69,12 +70,14 @@ class ConnectionManager:
         of a Sentinel failover would otherwise surface as a hard connection
         error and drop the event on the floor. Retrying gives the client
         discovery time to find the newly-promoted master."""
-        async def _op():
-            redis = get_master()
-            receivers = await redis.publish(_channel(room_id), event.model_dump_json())
-            logger.info(json.dumps({"event": "pub_broadcast", "room_id": room_id, "event_type": event.type, "receivers": receivers}))
+        with WideEvent("pub_broadcast", room_id=room_id, event_type=event.type) as log:
+            async def _op():
+                redis = get_master()
+                receivers = await redis.publish(_channel(room_id), event.model_dump_json())
+                log["receivers"] = receivers
+                log["outcome"] = "success"
 
-        await retry_with_backoff(_op, max_attempts=4, retryable_exceptions=_TRANSIENT_REDIS_ERRORS)
+            await retry_with_backoff(_op, max_attempts=4, retryable_exceptions=_TRANSIENT_REDIS_ERRORS)
 
     async def send_to(self, room_id: str, player_id: str, event: ServerEvent) -> None:
         """Direct-to-one-client send (e.g. validation errors) -- doesn't need
@@ -108,15 +111,18 @@ class ConnectionManager:
             await pubsub.aclose()
 
     async def _deliver_local(self, room_id: str, event: ServerEvent) -> None:
-        room = self._rooms.get(room_id, {})
-        stale: list[str] = []
-        delivered = 0
-        for player_id, ws in room.items():
-            try:
-                await ws.send_json(event.model_dump())
-                delivered += 1
-            except Exception:
-                stale.append(player_id)
-        logger.info(json.dumps({"event": "pub_deliver", "room_id": room_id, "event_type": event.type, "delivered": delivered, "stale": len(stale)}))
-        for player_id in stale:
-            self.disconnect(room_id, player_id)
+        with WideEvent("pub_deliver", room_id=room_id, event_type=event.type) as log:
+            room = self._rooms.get(room_id, {})
+            stale: list[str] = []
+            delivered = 0
+            for player_id, ws in room.items():
+                try:
+                    await ws.send_json(event.model_dump())
+                    delivered += 1
+                except Exception:
+                    stale.append(player_id)
+            log["delivered"] = delivered
+            log["stale"] = len(stale)
+            log["outcome"] = "success"
+            for player_id in stale:
+                self.disconnect(room_id, player_id)
