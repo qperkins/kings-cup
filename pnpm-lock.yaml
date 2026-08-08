@@ -17,9 +17,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      convex:
-        specifier: ^1.31.7
-        version: 1.31.7(react@19.2.3)
       lucide-react:
         specifier: ^0.563.0
         version: 0.563.0(react@19.2.3)
@@ -42,9 +39,6 @@ importers:
         specifier: ^3.4.0
         version: 3.4.0
     devDependencies:
-      '@edge-runtime/vm':
-        specifier: ^5.0.0
-        version: 5.0.0
       '@tailwindcss/postcss':
         specifier: ^4
         version: 4.1.18
@@ -57,9 +51,6 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.11)
-      convex-test:
-        specifier: ^0.0.41
-        version: 0.0.41(convex@1.31.7(react@19.2.3))
       eslint:
         specifier: ^9
         version: 9.39.2(jiti@2.6.1)
@@ -2168,27 +2159,6 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
-
-  convex-test@0.0.41:
-    resolution: {integrity: sha512-GPHeYFOi70n7UtW0eCEQFVhzl/+m8PvbWkDCbKpHLybI1MrScf4sVpGeM0cC2qmtxiduxa2nLPbehPalhh9oyQ==}
-    peerDependencies:
-      convex: ^1.16.4
-
-  convex@1.31.7:
-    resolution: {integrity: sha512-PtNMe1mAIOvA8Yz100QTOaIdgt2rIuWqencVXrb4McdhxBHZ8IJ1eXTnrgCC9HydyilGT1pOn+KNqT14mqn9fQ==}
-    engines: {node: '>=18.0.0', npm: '>=7.0.0'}
-    hasBin: true
-    peerDependencies:
-      '@auth0/auth0-react': ^2.0.1
-      '@clerk/clerk-react': ^4.12.8 || ^5.0.0
-      react: ^18.0.0 || ^19.0.0-0 || ^19.0.0
-    peerDependenciesMeta:
-      '@auth0/auth0-react':
-        optional: true
-      '@clerk/clerk-react':
-        optional: true
-      react:
-        optional: true
 
   cookie-signature@1.2.2:
     resolution: {integrity: sha512-D76uU73ulSXrD1UXF4KE2TMxVVwhsnCgfAyTg9k8P6KGZjlXKrOLe4dJQKI3Bxi5wjesZoFXJWElNWBjPZMbhg==}
@@ -4455,11 +4425,13 @@ snapshots:
     dependencies:
       '@noble/ciphers': 1.3.0
 
-  '@edge-runtime/primitives@6.0.0': {}
+  '@edge-runtime/primitives@6.0.0':
+    optional: true
 
   '@edge-runtime/vm@5.0.0':
     dependencies:
       '@edge-runtime/primitives': 6.0.0
+    optional: true
 
   '@emnapi/core@1.8.1':
     dependencies:
@@ -6265,17 +6237,6 @@ snapshots:
   content-type@1.0.5: {}
 
   convert-source-map@2.0.0: {}
-
-  convex-test@0.0.41(convex@1.31.7(react@19.2.3)):
-    dependencies:
-      convex: 1.31.7(react@19.2.3)
-
-  convex@1.31.7(react@19.2.3):
-    dependencies:
-      esbuild: 0.27.0
-      prettier: 3.8.1
-    optionalDependencies:
-      react: 19.2.3
 
   cookie-signature@1.2.2: {}
 

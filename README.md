@@ -5,7 +5,8 @@ An open source implementation of the classic King's Cup drinking game, built for
 ## Tech Stack
 
 - **Framework**: Next.js (App Router)
-- **Backend/Database**: Convex
+- **Game backend**: `game_engine` (FastAPI + Redis) via WebSocket
+- **Shared client**: `@kings-cup/shared` (`GameSocket`, retry, logging)
 - **UI & Styling**: Tailwind CSS, shadcn/ui
 - **Animations**: Motion (`motion/react`)
 - **Testing**: Vitest
@@ -20,4 +21,8 @@ pnpm install
 pnpm dev
 ```
 
+Set `NEXT_PUBLIC_WS_URL` (e.g. `ws://localhost:8080`) to point at the game engine.
+
 Then open `http://localhost:3000` in your browser.
+
+Verification scripts live under `scripts/verification/`.
