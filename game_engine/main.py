@@ -125,6 +125,11 @@ async def room_socket(websocket: WebSocket, room_id: str):
                             )
                             # Fallthrough to send state_sync below - ensures this client sees current state
                         
+                        # Send explicit success ACK to requesting client
+                        await websocket.send_json(
+                            ServerEvent(type="action_success", payload={"action_id": intent.action_id}).model_dump()
+                        )
+                        
                         # Send full state to this specific client for self-identification.
                         # Includes your_player_id so client knows which player in the roster is them.
                         # Sent whether publish succeeded or failed - if failed, this is the fallback
@@ -187,6 +192,11 @@ async def room_socket(websocket: WebSocket, room_id: str):
                     for e in result.events:
                         await manager.publish(room_id, e)
                     event["events_emitted"] = [e.type for e in result.events]
+                    
+                    # Send explicit success ACK to requesting client so they don't wait for timeout
+                    await websocket.send_json(
+                        ServerEvent(type="action_success", payload={"action_id": intent.action_id}).model_dump()
+                    )
                     event["outcome"] = "success"
                 except RetriesExhausted as exc:
                     event.update(
