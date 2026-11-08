@@ -24,6 +24,7 @@ from contextlib import asynccontextmanager
 from uuid import uuid4
 
 from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ReadOnlyError as RedisReadOnlyError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from .models import GameState
@@ -40,7 +41,9 @@ _LOCK_WAIT_MAX_DELAY_S = 0.25
 # new master is being discovered. NOT retried: business-logic errors
 # (EngineError) -- those are correct rejections, not transient failures, and
 # retrying them would just repeat the same illegal action.
-_TRANSIENT_REDIS_ERRORS = (RedisConnectionError, RedisTimeoutError)
+# ReadOnlyError: the node we reached was demoted to replica by a failover; the
+# next get_master() resolves the new primary, so it is retryable like a dropped link.
+_TRANSIENT_REDIS_ERRORS = (RedisConnectionError, RedisTimeoutError, RedisReadOnlyError)
 
 
 def _state_key(room_id: str) -> str:
@@ -80,12 +83,11 @@ async def room_lock(room_id: str):
     spreads them out so one of them wins promptly instead of all three
     livelocking.
     """
-    redis = get_master()
     lock_key = f"room:{room_id}:lock"
     token = str(uuid4())
 
     async def _try_acquire():
-        acquired = await redis.set(lock_key, token, nx=True, px=_LOCK_TTL_MS)
+        acquired = await get_master().set(lock_key, token, nx=True, px=_LOCK_TTL_MS)
         if not acquired:
             raise LockContended(room_id)
         return True
@@ -106,9 +108,13 @@ async def room_lock(room_id: str):
     finally:
         # Only release if we still hold it (token matches) -- avoids releasing
         # a lock some other instance acquired after ours expired mid-hold.
-        current = await redis.get(lock_key)
-        if current is not None and current.decode() == token:
-            await redis.delete(lock_key)
+        # Best effort: if Redis is mid-failover the lock simply expires (TTL).
+        try:
+            current = await get_master().get(lock_key)
+            if current is not None and current.decode() == token:
+                await get_master().delete(lock_key)
+        except _TRANSIENT_REDIS_ERRORS:
+            pass
 
 
 class LockContended(Exception):

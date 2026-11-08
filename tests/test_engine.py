@@ -125,16 +125,23 @@ def test_resume_token_unknown_falls_through_to_join_if_lobby():
     assert result.events[0].type == "player_joined"
 
 
-def test_resume_token_unknown_rejects_if_in_progress():
+def test_unknown_token_joins_mid_game_as_new_player_with_fresh_id():
     state = _started_game(player_count=2)
     intent = JoinIntent(
-        action_id="join-bad",
-        player_name="Intruder",
+        action_id="join-late",
+        player_name="Latecomer",
         resume_token="unknown-player-xyz",
     )
 
-    with pytest.raises(EngineError, match="Cannot join — game already in progress"):
-        apply_intent(state, intent)
+    result = apply_intent(state, intent)
+
+    assert len(state.players) == 3
+    joined = state.players[-1]
+    assert joined.name == "Latecomer"
+    assert joined.seat == 2
+    # clients never get to choose their own id
+    assert joined.id != "unknown-player-xyz"
+    assert result.events[0].type == "player_joined"
 
 
 def test_empty_deck_rejects_draw():

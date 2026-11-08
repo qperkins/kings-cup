@@ -27,6 +27,27 @@ manager = ConnectionManager()
 _intent_adapter: TypeAdapter[ActionIntent] = TypeAdapter(ActionIntent)
 
 
+def _guarded_apply(state, intent, socket_player_id: str):
+    """Authorize an intent against the *connection* it arrived on.
+
+    The engine checks intent.player_id against game state, but that id is
+    client-supplied and visible to everyone in the room, so on its own it
+    proves nothing. Here we require that the id is the one this socket joined
+    as, and that the player is still in the room (a kicked player's old socket
+    must not be able to act)."""
+    claimed = getattr(intent, "player_id", None)
+    if claimed is not None and claimed != socket_player_id:
+        raise EngineError("player_id does not match this connection")
+    if state.player_by_id(socket_player_id) is None:
+        raise EngineError("You are not in this room")
+    if intent.type == "start_game":
+        # start_game carries no player_id, so authorize by the socket itself.
+        host = state.host()
+        if host is None or host.id != socket_player_id:
+            raise EngineError("Only the host can do that")
+    return apply_intent(state, intent)
+
+
 @app.get("/health")
 async def health() -> dict:
     with WideEvent("health_check") as event:
@@ -87,7 +108,7 @@ async def room_socket(websocket: WebSocket, room_id: str):
                             ServerEvent(type="error", payload={"detail": str(exc)}).model_dump()
                         )
                         continue
-                    except RetriesExhausted as exc:
+                    except (RetriesExhausted, TimeoutError) as exc:
                         event.update(outcome="lock_timeout", error={"type": "RetriesExhausted", "message": str(exc)})
                         await websocket.send_json(
                             ServerEvent(type="error", payload={"detail": "Room busy, please retry"}).model_dump()
@@ -148,6 +169,13 @@ async def room_socket(websocket: WebSocket, room_id: str):
 
                 event["player_id"] = player_id
 
+                if player_id is None:
+                    event["outcome"] = "rejected"
+                    await websocket.send_json(
+                        ServerEvent(type="error", payload={"detail": "Join the room first"}).model_dump()
+                    )
+                    continue
+
                 # Rate limit check for all messages after initial join
                 if player_id is not None:
                     allowed = await check_rate_limit(player_id)
@@ -161,14 +189,16 @@ async def room_socket(websocket: WebSocket, room_id: str):
 
                 try:
                     with timed_field(event, "lock_wait"):
-                        result = await apply_with_lock(room_id, lambda state: apply_intent(state, intent))
+                        result = await apply_with_lock(
+                            room_id, lambda state: _guarded_apply(state, intent, player_id)
+                        )
                 except EngineError as exc:
                     event.update(outcome="rejected", error={"type": "EngineError", "message": str(exc)})
                     await websocket.send_json(
                         ServerEvent(type="error", payload={"detail": str(exc)}).model_dump()
                     )
                     continue
-                except RetriesExhausted as exc:
+                except (RetriesExhausted, TimeoutError) as exc:
                     # Lock never freed up in time -- surfaced as retryable to
                     # the client. Safe to retry because every intent carries
                     # an action_id the engine dedupes on.
@@ -198,6 +228,16 @@ async def room_socket(websocket: WebSocket, room_id: str):
                         ServerEvent(type="action_success", payload={"action_id": intent.action_id}).model_dump()
                     )
                     event["outcome"] = "success"
+                    if any(
+                        e.type == "player_removed" and e.payload.get("player_id") == player_id
+                        for e in result.events
+                    ):
+                        # This player just left: they're out of the room, so close
+                        # their socket (after the ack above) instead of waiting for
+                        # the client to hang up.
+                        manager.disconnect(room_id, player_id, websocket)
+                        await websocket.close()
+                        break
                 except RetriesExhausted as exc:
                     event.update(
                         outcome="publish_failed",
@@ -223,7 +263,7 @@ async def room_socket(websocket: WebSocket, room_id: str):
     except WebSocketDisconnect:
         with WideEvent("player_disconnected", room_id=room_id, player_id=player_id) as event:
             if player_id:
-                manager.disconnect(room_id, player_id)
+                manager.disconnect(room_id, player_id, websocket)
 
                 def _mark_disconnected(state):
                     for p in state.players:
@@ -235,5 +275,5 @@ async def room_socket(websocket: WebSocket, room_id: str):
                     with timed_field(event, "lock_wait"):
                         await apply_with_lock(room_id, _mark_disconnected)
                     event["outcome"] = "success"
-                except RetriesExhausted as exc:
+                except (RetriesExhausted, TimeoutError) as exc:
                     event.update(outcome="lock_timeout", error={"type": "RetriesExhausted", "message": str(exc)})

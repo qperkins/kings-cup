@@ -25,11 +25,14 @@ from .redis_client import get_master, get_replica
 from .retry import retry_with_backoff
 from .logging_utils import WideEvent
 from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ReadOnlyError as RedisReadOnlyError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 logger = logging.getLogger("kings_cup.connections")
 
-_TRANSIENT_REDIS_ERRORS = (RedisConnectionError, RedisTimeoutError)
+# ReadOnlyError: the node we reached was demoted to replica by a failover; the
+# next get_master() resolves the new primary, so it is retryable like a dropped link.
+_TRANSIENT_REDIS_ERRORS = (RedisConnectionError, RedisTimeoutError, RedisReadOnlyError)
 
 
 def _channel(room_id: str) -> str:
@@ -50,9 +53,12 @@ class ConnectionManager:
         if is_first_local_connection:
             self._subscriptions[room_id] = asyncio.create_task(self._listen(room_id))
 
-    def disconnect(self, room_id: str, player_id: str) -> None:
+    def disconnect(self, room_id: str, player_id: str, ws: WebSocket | None = None) -> None:
+        """Drop a player's local socket. When `ws` is given, only drop it if it is
+        still the registered socket, so an old connection closing can't evict the
+        newer connection that replaced it (same player, second tab/reconnect)."""
         room = self._rooms.get(room_id)
-        if room and player_id in room:
+        if room and player_id in room and (ws is None or room[player_id] is ws):
             del room[player_id]
 
         if room is not None and not room:
@@ -94,21 +100,68 @@ class ConnectionManager:
     async def _listen(self, room_id: str) -> None:
         """Background task: subscribe to this room's channel on a replica
         (spreads pub/sub fan-out load off the primary) and forward every
-        message to this instance's local sockets for the room."""
-        redis = get_replica()
-        pubsub = redis.pubsub()
-        await pubsub.subscribe(_channel(room_id))
+        message to this instance's local sockets for the room.
+
+        A subscription is bound to one Redis node. If that node dies (Sentinel
+        failover, restart, network blip) the stream ends or raises; without a
+        reconnect every client on this instance would silently stop receiving
+        room events while its own actions still succeed. So we loop: resubscribe
+        through Sentinel with backoff, then push each local player a fresh
+        state_sync to cover whatever was published while we were deaf."""
+        channel = _channel(room_id)
+        delay = 0.2
+        first = True
         try:
-            async for message in pubsub.listen():
-                if message["type"] != "message":
-                    continue
-                event = ServerEvent.model_validate(json.loads(message["data"]))
-                await self._deliver_local(room_id, event)
+            while room_id in self._rooms:
+                pubsub = None
+                try:
+                    pubsub = get_replica().pubsub()
+                    await pubsub.subscribe(channel)
+                    if not first:
+                        logger.warning("pubsub resubscribed room=%s", room_id)
+                        await self._resync_local(room_id)
+                    first = False
+                    delay = 0.2
+                    async for message in pubsub.listen():
+                        if message["type"] != "message":
+                            continue
+                        event = ServerEvent.model_validate(json.loads(message["data"]))
+                        await self._deliver_local(room_id, event)
+                    # listen() returned: the connection was closed under us.
+                    logger.warning("pubsub stream ended room=%s; reconnecting", room_id)
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # connection lost, failover, bad payload
+                    logger.warning("pubsub error room=%s: %r; reconnecting", room_id, exc)
+                    first = False
+                finally:
+                    if pubsub is not None:
+                        try:
+                            await pubsub.unsubscribe(channel)
+                            await pubsub.aclose()
+                        except Exception:
+                            pass
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 5.0)
         except asyncio.CancelledError:
             pass
-        finally:
-            await pubsub.unsubscribe(_channel(room_id))
-            await pubsub.aclose()
+
+    async def _resync_local(self, room_id: str) -> None:
+        """Send every local socket for the room the current full state."""
+        from .room_store import load_state  # local import: avoids a cycle
+
+        try:
+            state = await load_state(room_id)
+        except Exception as exc:
+            logger.warning("resync load failed room=%s: %r", room_id, exc)
+            return
+        for player_id, ws in list(self._rooms.get(room_id, {}).items()):
+            payload = state.to_client_view()
+            payload["your_player_id"] = player_id
+            try:
+                await ws.send_json(ServerEvent(type="state_sync", payload=payload).model_dump())
+            except Exception:
+                self.disconnect(room_id, player_id, ws)
 
     async def _deliver_local(self, room_id: str, event: ServerEvent) -> None:
         with WideEvent("pub_deliver", room_id=room_id, event_type=event.type) as log:
@@ -126,3 +179,17 @@ class ConnectionManager:
             log["outcome"] = "success"
             for player_id in stale:
                 self.disconnect(room_id, player_id)
+
+            # A kicked player must stop receiving room events and can't be left
+            # holding an open socket. Every instance runs this for its own local
+            # sockets, so it works across instances without extra coordination.
+            # (Players who *leave* are closed by main.py after their ack instead.)
+            if event.type == "player_removed" and event.payload.get("reason") == "kicked":
+                removed_id = event.payload.get("player_id")
+                removed_ws = room.get(removed_id) if removed_id else None
+                if removed_ws is not None:
+                    self.disconnect(room_id, removed_id, removed_ws)
+                    try:
+                        await removed_ws.close()
+                    except Exception:
+                        pass

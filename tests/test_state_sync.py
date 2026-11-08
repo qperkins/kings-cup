@@ -41,7 +41,7 @@ async def test_reconnect_produces_state_sync_for_resumed_player_only(ws_server):
         async with websockets.connect(f"{ws_server}/ws/{room_id}") as ws_b:
             sync_b = await join_and_sync(ws_b, "Bob")
             player_b_id = sync_b[1]
-            await ws_b.send(json.dumps({"type": "start_game", "action_id": str(uuid4())}))
+            await ws_a.send(json.dumps({"type": "start_game", "action_id": str(uuid4())}))
             await recv_until(ws_b, lambda m: m.get("type") == "game_started")
             await recv_until(ws_a, lambda m: m.get("type") == "game_started")
 
@@ -113,7 +113,8 @@ async def test_drawn_pile_top_includes_rule_text_after_draw(
     assert top is not None
     assert top["rank"] == "Q"
     assert top["suit"] == "hearts"
-    assert top["rule_text"] == queen.rule_text()
+    # The lobby default is Quick Flip on, so the Queen reads as the battle.
+    assert top["rule_text"] == queen.rule_text(quick_flip=True)
 
 
 @pytest.mark.asyncio

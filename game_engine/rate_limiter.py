@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from fastapi import WebSocket
 from redis.exceptions import ConnectionError as RedisConnectionError
+from redis.exceptions import ReadOnlyError as RedisReadOnlyError
 from redis.exceptions import TimeoutError as RedisTimeoutError
 
 from .redis_client import get_master
@@ -27,7 +28,9 @@ from .retry import retry_with_backoff
 _BUCKET_CAPACITY = 10
 _REFILL_RATE_PER_SECOND = 5.0
 
-_TRANSIENT_REDIS_ERRORS = (RedisConnectionError, RedisTimeoutError)
+# ReadOnlyError: the node we reached was demoted to replica by a failover; the
+# next get_master() resolves the new primary, so it is retryable like a dropped link.
+_TRANSIENT_REDIS_ERRORS = (RedisConnectionError, RedisTimeoutError, RedisReadOnlyError)
 
 # Atomic token bucket implementation via Lua script.
 # Redis executes Lua scripts atomically server-side, so the entire

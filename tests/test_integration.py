@@ -13,7 +13,16 @@ from tests.ws_helpers import join_and_sync, recv_all_pending, recv_until
 
 
 @pytest.mark.asyncio
-async def test_full_join_start_draw_sequence(ws_server, wide_event_capture):
+async def test_full_join_start_draw_sequence(ws_server, wide_event_capture, monkeypatch):
+    # Jacks and Queens hold the turn until the drawer enters a ban/rule or reports a
+    # battle, so a random first card made this test hang ~15% of the time. Pin the
+    # deck to plain cards: this test is about join -> start -> draw -> turn advance.
+    from game_engine import engine
+    from game_engine.models import Card, Rank, Suit
+
+    monkeypatch.setattr(
+        engine, "new_deck", lambda: [Card(rank=Rank.TWO, suit=Suit.CLUBS) for _ in range(52)]
+    )
     room_id = f"integration-{uuid4()}"
     async with websockets.connect(f"{ws_server}/ws/{room_id}") as ws_a:
         async with websockets.connect(f"{ws_server}/ws/{room_id}") as ws_b:

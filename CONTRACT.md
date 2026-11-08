@@ -195,3 +195,33 @@ the whole project is trying to demonstrate.
       expected rather than the request just silently hanging
 - [ ] `/health` returns `degraded` (not a crash) if Redis is unreachable
 - [ ] k6 WS load test run, numbers recorded in README
+
+## Addendum — Queen / Jack variants, host controls
+
+New `GameState` fields (all in `state_sync` / `to_client_view()`): `quick_flip_enabled` (default true), `rules[]`, `banned_words[]`, `pending_input {player_id, kind: "rule"|"word_ban"} | null`, `battle {challenger_id, opponent_id, challenge: "flip_cup"|"bottle_flip"} | null`.
+
+Card changes: Jack = **Jack's Trap** (drawer bans a word); Queen = **Quick Flip Battle** (when `quick_flip_enabled` and ≥2 players; random opponent + challenge, drawer reports the loser) else **Queen's Rule** (drawer creates a rule). The turn does not advance, and `draw_card` is rejected, until the pending input or battle is resolved.
+
+Intents (all carry `action_id`; `player_id` is checked by the server):
+- `set_quick_flip {player_id, enabled}` — host only, lobby only → `settings_updated`
+- `submit_rule {player_id, text}` / `submit_ban {player_id, word}` — pending player only → `rule_added` / `word_banned` + `turn_advanced`
+- `resolve_battle {player_id, loser_id|null}` — challenger only → `battle_resolved` + `turn_advanced`
+- `restart_game {player_id}` / `end_game {player_id}` — host only (lowest seat) → `game_restarted` (full client view) / `game_finished`
+
+Other new event: `input_required {pending_input, battle}` emitted after a Jack/Queen draw.
+
+## Addendum — Joining mid-game, leave / kick / make host, challenge setting
+
+**Identity is bound to the socket.** After `join`, every intent must carry the `player_id` that socket joined as (a mismatch is rejected with `player_id does not match this connection`), and the player must still be in the room (`You are not in this room`). Intents sent before `join` are rejected (`Join the room first`).
+
+New `GameState` fields (all in `state_sync` / `to_client_view()` unless noted): `host_id` (explicit host; falls back to lowest seat), `challenge_type` (`flip_cup` | `bottle_flip`, default `flip_cup`), and `kicked_ids` (server-only; never sent).
+
+- **Join mid-game.** `join` is accepted in any phase. A fresh join always gets a server-generated id and the next seat (`max(seat)+1`; seats are never reused or compacted), so it takes its turn after everyone already seated. A `resume_token` for a player who left is treated as a fresh join; one for a kicked player is rejected (`You were removed from this room`).
+- `set_challenge_type {player_id, challenge_type}` — host only, lobby only → `settings_updated {quick_flip_enabled, challenge_type}`. Every Quick Flip battle uses this one setting; the server no longer picks per battle.
+- `leave_room {player_id}` — any member → `player_removed`.
+- `kick_player {player_id, target_id}` — host only, not self → `player_removed {reason: "kicked"}`. The server closes the kicked player's socket.
+- `make_host {player_id, target_id}` — host only → `host_changed {host_id}`.
+
+`player_removed` carries the full client view (already repaired) plus `player_id` and `reason` (`left` | `kicked`); clients re-apply it like a `state_sync`. Repair rules when the removed player was: the host (host passes to the lowest remaining seat); on turn (turn moves to the next occupied seat); owing a rule/ban (cleared, turn moves on); a battle challenger or opponent (battle cancelled, drawer's turn ends). If fewer than 2 players remain in a running game, `game_finished` follows.
+
+Turn order uses the next occupied seat, so gaps are fine. `restart_game` and `start_game` begin at the lowest occupied seat.
