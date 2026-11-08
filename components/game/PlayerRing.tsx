@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { PlayerActions } from "./PlayerActions";
 
 interface Player {
   userId: string;
@@ -13,6 +14,9 @@ interface PlayerRingProps {
   currentPlayerId: string | null;
   userId: string;
   hostId: string | null;
+  /** Passed only to the host; shows a per-player menu for everyone else. */
+  onMakeHost?: (playerId: string) => Promise<unknown>;
+  onKick?: (playerId: string) => Promise<unknown>;
 }
 
 export function PlayerRing({
@@ -20,6 +24,8 @@ export function PlayerRing({
   currentPlayerId,
   userId,
   hostId,
+  onMakeHost,
+  onKick,
 }: PlayerRingProps) {
   return (
     <div className="flex flex-wrap justify-center gap-3">
@@ -65,6 +71,14 @@ export function PlayerRing({
               {player.name ?? "Anon"}
               {isYou && " (you)"}
             </span>
+
+            {onMakeHost && onKick && !isYou && (
+              <PlayerActions
+                playerName={player.name ?? "player"}
+                onMakeHost={() => onMakeHost(player.userId)}
+                onKick={() => onKick(player.userId)}
+              />
+            )}
 
             {/* Badges */}
             {isHost && (

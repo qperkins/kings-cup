@@ -15,9 +15,8 @@ import {
   isRetryableServerError,
   sendIntentWithRetry,
   type PendingVerdict,
-  type ServerVerdict,
 } from "./sendWithRetry";
-import type { RoomState } from "./types";
+import type { ChallengeType, RoomState } from "./types";
 
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:8000";
@@ -30,6 +29,14 @@ const EVENT_TYPES = [
   "card_drawn",
   "turn_advanced",
   "game_finished",
+  "settings_updated",
+  "host_changed",
+  "player_removed",
+  "input_required",
+  "rule_added",
+  "word_banned",
+  "battle_resolved",
+  "game_restarted",
   "action_success",
   "error",
 ] as const;
@@ -38,6 +45,9 @@ export function useRoomSocket(roomId: string, playerName: string) {
   const [state, setState] = useState<RoomState>(() => initialRoomState(roomId));
   const [playerId, setPlayerId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Set when the server removed *us* (kicked). The page shows a notice and goes home.
+  const [removedReason, setRemovedReason] = useState<"kicked" | null>(null);
+  const playerIdRef = useRef<string | null>(null);
 
   const socketRef = useRef<GameSocket | null>(null);
   const joinedRef = useRef(false);
@@ -76,8 +86,21 @@ export function useRoomSocket(roomId: string, playerName: string) {
         const yourId = payload.your_player_id;
         if (typeof yourId === "string") {
           GameSocket.saveResumeToken(yourId);
+          playerIdRef.current = yourId;
           setPlayerId(yourId);
         }
+      }
+
+      if (
+        eventType === "player_removed" &&
+        payload.player_id === playerIdRef.current &&
+        playerIdRef.current !== null
+      ) {
+        // We're the one who was removed. Forget the session and stop reconnecting.
+        GameSocket.clearResumeToken();
+        socketRef.current?.close();
+        if (payload.reason === "kicked") setRemovedReason("kicked");
+        return;
       }
 
       if (eventType === "action_success") {
@@ -167,7 +190,7 @@ export function useRoomSocket(roomId: string, playerName: string) {
       cancelPendingVerdict(getPendingVerdict);
       socketRef.current = null;
     };
-  }, [roomId, playerName, handleEvent, waitForVerdict]);
+  }, [roomId, playerName, handleEvent, waitForVerdict, getPendingVerdict]);
 
   const sendStartGame = useCallback(async () => {
     const socket = socketRef.current;
@@ -207,12 +230,96 @@ export function useRoomSocket(roomId: string, playerName: string) {
     return result;
   }, [playerId, waitForVerdict]);
 
+  // Generic sender for the simple intents below (host controls, rule/ban
+  // submission, battle result). All carry player_id; the server enforces who
+  // is allowed to do what.
+  const sendSimple = useCallback(
+    async (
+      intent: { type: string; [key: string]: unknown },
+      failMessage: string,
+    ) => {
+      const socket = socketRef.current;
+      if (!socket || !playerId) {
+        return { success: false as const, error: "Not connected" };
+      }
+      setError(null);
+      const result = await sendIntentWithRetry(
+        socket,
+        { ...intent, player_id: playerId },
+        waitForVerdict,
+      );
+      if (!result.success) {
+        setError(typeof result.error === "string" ? result.error : failMessage);
+      }
+      return result;
+    },
+    [playerId, waitForVerdict],
+  );
+
+  const sendSetQuickFlip = useCallback(
+    (enabled: boolean) =>
+      sendSimple({ type: "set_quick_flip", enabled }, "Failed to update setting"),
+    [sendSimple],
+  );
+  const sendSubmitRule = useCallback(
+    (text: string) => sendSimple({ type: "submit_rule", text }, "Failed to add rule"),
+    [sendSimple],
+  );
+  const sendSubmitBan = useCallback(
+    (word: string) => sendSimple({ type: "submit_ban", word }, "Failed to ban word"),
+    [sendSimple],
+  );
+  const sendResolveBattle = useCallback(
+    (loserId: string | null) =>
+      sendSimple({ type: "resolve_battle", loser_id: loserId }, "Failed to report result"),
+    [sendSimple],
+  );
+  const sendRestart = useCallback(
+    () => sendSimple({ type: "restart_game" }, "Failed to restart game"),
+    [sendSimple],
+  );
+  const sendEndGame = useCallback(
+    () => sendSimple({ type: "end_game" }, "Failed to end game"),
+    [sendSimple],
+  );
+
+  const sendSetChallengeType = useCallback(
+    (challengeType: ChallengeType) =>
+      sendSimple(
+        { type: "set_challenge_type", challenge_type: challengeType },
+        "Failed to update setting",
+      ),
+    [sendSimple],
+  );
+  const sendKick = useCallback(
+    (targetId: string) =>
+      sendSimple({ type: "kick_player", target_id: targetId }, "Failed to remove player"),
+    [sendSimple],
+  );
+  const sendMakeHost = useCallback(
+    (targetId: string) =>
+      sendSimple({ type: "make_host", target_id: targetId }, "Failed to make host"),
+    [sendSimple],
+  );
+
+  /** Close this tab's connection for good and forget the session. */
   const disconnect = useCallback(() => {
     joinedRef.current = false;
     joinInFlightRef.current = false;
     cancelPendingVerdict(getPendingVerdict);
+    GameSocket.clearResumeToken();
+    socketRef.current?.close();
     socketRef.current = null;
   }, [getPendingVerdict]);
+
+  /** Tell the server we're leaving (so the roster, turn and host are repaired
+   * for everyone else), then close. Closes even if the server can't be reached. */
+  const leaveRoom = useCallback(async () => {
+    if (socketRef.current && playerIdRef.current) {
+      await sendSimple({ type: "leave_room" }, "Failed to leave room");
+    }
+    disconnect();
+  }, [sendSimple, disconnect]);
 
   return {
     state,
@@ -220,6 +327,17 @@ export function useRoomSocket(roomId: string, playerName: string) {
     error,
     sendStartGame,
     sendDrawCard,
+    sendSetQuickFlip,
+    sendSubmitRule,
+    sendSubmitBan,
+    sendResolveBattle,
+    sendRestart,
+    sendEndGame,
+    sendSetChallengeType,
+    sendKick,
+    sendMakeHost,
+    leaveRoom,
+    removedReason,
     disconnect,
   };
 }

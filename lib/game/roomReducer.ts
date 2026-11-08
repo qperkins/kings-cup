@@ -2,6 +2,7 @@ import type { CardData } from "@/components/game/card-utils";
 import {
   cardId,
   initialRoomState,
+  type ChallengeType,
   type Player,
   type RoomPhase,
   type RoomState,
@@ -20,6 +21,10 @@ function parsePlayer(raw: unknown): Player | null {
     seat: typeof p.seat === "number" ? p.seat : 0,
     connected: p.connected !== false,
   };
+}
+
+function parseChallenge(raw: unknown, fallback: ChallengeType): ChallengeType {
+  return raw === "flip_cup" || raw === "bottle_flip" ? raw : fallback;
 }
 
 function parsePhase(raw: unknown): RoomPhase {
@@ -94,6 +99,16 @@ export function applyStateSync(
     cardsDrawn,
     lastDrawnCard,
     lastCardRule,
+    quickFlipEnabled:
+      typeof sync.quick_flip_enabled === "boolean"
+        ? sync.quick_flip_enabled
+        : state.quickFlipEnabled,
+    challengeType: parseChallenge(sync.challenge_type, state.challengeType),
+    hostId: typeof sync.host_id === "string" ? sync.host_id : state.hostId,
+    rules: Array.isArray(sync.rules) ? sync.rules : [],
+    bannedWords: Array.isArray(sync.banned_words) ? sync.banned_words : [],
+    pendingInput: sync.pending_input ?? null,
+    battle: sync.battle ?? null,
     joining: false,
   };
 }
@@ -155,6 +170,63 @@ export function reduceRoomEvent(
       };
     }
 
+    case "settings_updated":
+      return {
+        ...state,
+        quickFlipEnabled:
+          typeof payload.quick_flip_enabled === "boolean"
+            ? payload.quick_flip_enabled
+            : state.quickFlipEnabled,
+        challengeType: parseChallenge(payload.challenge_type, state.challengeType),
+      };
+
+    case "host_changed":
+      return {
+        ...state,
+        hostId: typeof payload.host_id === "string" ? payload.host_id : state.hostId,
+      };
+
+    case "player_removed":
+      // Carries a full client view (roster, host, turn, pending input, battle)
+      // already repaired by the server, so re-apply it like a state_sync.
+      return applyStateSync(state, payload);
+
+    case "input_required":
+      return {
+        ...state,
+        pendingInput:
+          (payload.pending_input as RoomState["pendingInput"]) ?? null,
+        battle: (payload.battle as RoomState["battle"]) ?? null,
+      };
+
+    case "rule_added":
+      return {
+        ...state,
+        pendingInput: null,
+        rules:
+          typeof payload.text === "string"
+            ? [...state.rules, payload.text]
+            : state.rules,
+      };
+
+    case "word_banned":
+      return {
+        ...state,
+        pendingInput: null,
+        bannedWords:
+          typeof payload.word === "string"
+            ? [...state.bannedWords, payload.word]
+            : state.bannedWords,
+      };
+
+    case "battle_resolved":
+      return { ...state, battle: null };
+
+    case "game_restarted":
+      // Payload is a full client view; reuse state_sync handling (it resets
+      // the pile, rules, banned words, pending input and battle).
+      return applyStateSync(state, payload);
+
     case "turn_advanced":
       return {
         ...state,
@@ -168,6 +240,8 @@ export function reduceRoomEvent(
       return {
         ...state,
         phase: "finished",
+        pendingInput: null,
+        battle: null,
         kingsDrawn:
           typeof payload.kings_drawn === "number"
             ? payload.kings_drawn

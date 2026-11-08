@@ -10,6 +10,19 @@ export interface Player {
   connected: boolean;
 }
 
+export interface PendingInput {
+  player_id: string;
+  kind: "rule" | "word_ban";
+}
+
+export type ChallengeType = "flip_cup" | "bottle_flip";
+
+export interface Battle {
+  challenger_id: string;
+  opponent_id: string;
+  challenge: ChallengeType;
+}
+
 export interface StateSyncPayload {
   room_id: string;
   phase: RoomPhase;
@@ -20,6 +33,13 @@ export interface StateSyncPayload {
   your_player_id: string;
   drawn_pile_top: { rank: string; suit: string; rule_text: string } | null;
   cards_drawn?: number;
+  quick_flip_enabled?: boolean;
+  challenge_type?: ChallengeType;
+  host_id?: string | null;
+  rules?: string[];
+  banned_words?: string[];
+  pending_input?: PendingInput | null;
+  battle?: Battle | null;
 }
 
 export interface RoomState {
@@ -32,6 +52,13 @@ export interface RoomState {
   cardsDrawn: number;
   lastDrawnCard: CardData | null;
   lastCardRule: string | null;
+  quickFlipEnabled: boolean;
+  challengeType: ChallengeType;
+  hostId: string | null;
+  rules: string[];
+  bannedWords: string[];
+  pendingInput: PendingInput | null;
+  battle: Battle | null;
   connected: boolean;
   joining: boolean;
 }
@@ -46,6 +73,13 @@ export const initialRoomState = (roomId: string): RoomState => ({
   cardsDrawn: 0,
   lastDrawnCard: null,
   lastCardRule: null,
+  quickFlipEnabled: true,
+  challengeType: "flip_cup",
+  hostId: null,
+  rules: [],
+  bannedWords: [],
+  pendingInput: null,
+  battle: null,
   connected: false,
   joining: true,
 });
@@ -58,10 +92,18 @@ export function activePlayer(state: RoomState): Player | null {
   return state.players.find((p) => p.seat === state.currentTurnSeat) ?? null;
 }
 
+/** The host is whoever the server says (host_id); lowest seat only as a fallback. */
+export function hostIdOf(state: RoomState): string | null {
+  if (state.hostId && state.players.some((p) => p.id === state.hostId)) {
+    return state.hostId;
+  }
+  const sorted = [...state.players].sort((a, b) => a.seat - b.seat);
+  return sorted[0]?.id ?? null;
+}
+
 export function isHost(state: RoomState, playerId: string | null): boolean {
   if (!playerId || state.players.length === 0) return false;
-  const sorted = [...state.players].sort((a, b) => a.seat - b.seat);
-  return sorted[0]?.id === playerId;
+  return hostIdOf(state) === playerId;
 }
 
 /** Map reducer state to the GameBoard's existing GameState shape. */
@@ -69,7 +111,7 @@ export function toGameState(state: RoomState): GameState {
   const sorted = [...state.players].sort((a, b) => a.seat - b.seat);
   const turnOrder = sorted.map((p) => p.id);
   const playerNames = Object.fromEntries(sorted.map((p) => [p.id, p.name]));
-  const hostId = sorted[0]?.id ?? null;
+  const hostId = hostIdOf(state);
   const current = activePlayer(state);
 
   // Lobby deck is empty server-side; cards_remaining is meaningless until start.
@@ -87,7 +129,7 @@ export function toGameState(state: RoomState): GameState {
       turnIndex: state.currentTurnSeat,
       roundNumber: 1,
       rules: { version: "kingscup_v1", byRank: {} },
-      lobbySnapshot: { playerNames, hostId, players: turnOrder },
+      lobbySnapshot: { playerNames, hostId: hostId ?? undefined, players: turnOrder },
       drinksTakenTotal: 0,
       roomId: state.roomId,
     },
@@ -96,5 +138,11 @@ export function toGameState(state: RoomState): GameState {
       : null,
     lastDrawnCard: state.lastDrawnCard,
     lastCardRule: state.lastCardRule,
+    quickFlipEnabled: state.quickFlipEnabled,
+    challengeType: state.challengeType,
+    rules: state.rules,
+    bannedWords: state.bannedWords,
+    pendingInput: state.pendingInput,
+    battle: state.battle,
   };
 }

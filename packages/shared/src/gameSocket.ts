@@ -27,6 +27,10 @@ export class GameSocketError extends Error {
 
 export class GameSocket {
   private ws: WebSocket | null = null;
+  private closedByUs = false;
+  /** Remembered from the last join so an automatic re-join after a dropped
+   * connection carries a valid player_name (the server rejects a join without one). */
+  private lastJoinName: string | null = null;
   private listeners = new Map<string, Set<(payload: Record<string, unknown>) => void>>();
 
   constructor(private roomId: string, private wsBaseUrl: string) {}
@@ -71,6 +75,10 @@ export class GameSocket {
       action_id: intent.action_id ?? crypto.randomUUID(),
     } as ActionIntent;
 
+    if (fullIntent.type === "join" && typeof fullIntent.player_name === "string") {
+      this.lastJoinName = fullIntent.player_name;
+    }
+
     const event = new WideEvent("action_sent", {
       room_id: this.roomId,
       intent_type: fullIntent.type,
@@ -98,6 +106,18 @@ export class GameSocket {
     return result;
   }
 
+  /** Close for good (leave / removed): no auto-reconnect afterwards. */
+  close(): void {
+    this.closedByUs = true;
+    const socket = this.ws;
+    this.ws = null;
+    try {
+      socket?.close();
+    } catch {
+      /* already closed */
+    }
+  }
+
   on(eventType: string, handler: (payload: Record<string, unknown>) => void): void {
     if (!this.listeners.has(eventType)) this.listeners.set(eventType, new Set());
     this.listeners.get(eventType)!.add(handler);
@@ -115,14 +135,22 @@ export class GameSocket {
     };
 
     socket.onclose = () => {
+      if (this.closedByUs) {
+        this.ws = null;
+        return;
+      }
       console.warn("[GameSocket] connection closed, auto-reconnecting...");
       this.ws = null;
       // Auto-reconnect after 1s when connection drops (e.g., network switch)
       setTimeout(() => {
         this.connect().then((result) => {
-          if (result.success && GameSocket.getResumeToken()) {
+          if (result.success && GameSocket.getResumeToken() && this.lastJoinName && !this.closedByUs) {
             // Auto-rejoin with resume_token to reconnect to same player
-            this.send({ type: "join", resume_token: GameSocket.getResumeToken() });
+            this.send({
+              type: "join",
+              player_name: this.lastJoinName,
+              resume_token: GameSocket.getResumeToken(),
+            });
           }
         });
       }, 1000);
@@ -134,6 +162,10 @@ export class GameSocket {
    * new player. See game_engine/engine.py's _handle_join. */
   static getResumeToken(): string | null {
     return typeof window !== "undefined" ? sessionStorage.getItem(RESUME_TOKEN_KEY) : null;
+  }
+
+  static clearResumeToken(): void {
+    if (typeof window !== "undefined") sessionStorage.removeItem(RESUME_TOKEN_KEY);
   }
 
   static saveResumeToken(playerId: string): void {

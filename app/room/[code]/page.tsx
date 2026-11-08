@@ -12,7 +12,10 @@ import {
 } from "@/components/ui/card";
 import { GameBoard } from "@/components/game/GameBoard";
 import { useRoomSocket } from "@/lib/game/useRoomSocket";
-import { isHost, toGameState } from "@/lib/game/types";
+import { hostIdOf, isHost, toGameState } from "@/lib/game/types";
+import { PlayerActions } from "@/components/game/PlayerActions";
+import { BackgroundPicker } from "@/components/BackgroundPicker";
+import { pageClass, useBackground } from "@/lib/useBackground";
 
 export default function RoomPage() {
   return (
@@ -34,8 +37,25 @@ function RoomPageContent() {
   const roomCode = (params.code as string) ?? "";
   const playerName = searchParams.get("name") ?? "";
 
-  const { state, playerId, error: socketError, sendStartGame, sendDrawCard, disconnect } =
-    useRoomSocket(roomCode, playerName);
+  const {
+    state,
+    playerId,
+    error: socketError,
+    sendStartGame,
+    sendDrawCard,
+    sendSetQuickFlip,
+    sendSubmitRule,
+    sendSubmitBan,
+    sendResolveBattle,
+    sendRestart,
+    sendEndGame,
+    sendSetChallengeType,
+    sendKick,
+    sendMakeHost,
+    leaveRoom,
+    removedReason,
+  } = useRoomSocket(roomCode, playerName);
+  const [bg, setBg] = useBackground();
 
   const [error, setError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
@@ -46,6 +66,7 @@ function RoomPageContent() {
   );
 
   const host = isHost(state, playerId);
+  const currentHostId = hostIdOf(state);
   const gameActive = state.phase === "in_progress" || state.phase === "finished";
   const displayError = error ?? socketError;
 
@@ -62,8 +83,8 @@ function RoomPageContent() {
     setIsStarting(false);
   };
 
-  const handleLeaveRoom = () => {
-    disconnect();
+  const handleLeaveRoom = async () => {
+    await leaveRoom();
     window.location.href = "/";
   };
 
@@ -73,7 +94,8 @@ function RoomPageContent() {
 
   if (!roomCode) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+      <main data-bg={bg}
+      className={pageClass(bg, "min-h-screen flex items-center justify-center p-4")}>
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center text-muted-foreground">
             Invalid room code
@@ -83,9 +105,25 @@ function RoomPageContent() {
     );
   }
 
+  if (removedReason === "kicked") {
+    return (
+      <main data-bg={bg} className={pageClass(bg, "min-h-screen flex items-center justify-center p-4")}>
+        <Card className="w-full max-w-md">
+          <CardContent className="space-y-4 p-6 text-center">
+            <p className="font-medium">You were removed from the room by the host.</p>
+            <Button onClick={() => (window.location.href = "/")} className="w-full">
+              Back to home
+            </Button>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
   if (!playerName.trim()) {
     return (
-      <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+      <main data-bg={bg}
+      className={pageClass(bg, "min-h-screen flex items-center justify-center p-4")}>
         <Card className="w-full max-w-md">
           <CardContent className="p-6 text-center text-muted-foreground">
             Missing player name. Go back and enter your name first.
@@ -99,24 +137,40 @@ function RoomPageContent() {
     const gameState = toGameState(state);
 
     return (
-      <main className="min-h-screen bg-gradient-to-br from-background via-muted to-background p-4">
-        <div className="text-center mb-2">
-          <span className="font-mono text-sm tracking-widest text-muted-foreground/60">
+      <main data-bg={bg}
+        className={pageClass(bg, "min-h-screen p-4")}>
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-mono text-sm tracking-widest text-muted-foreground">
             {roomCode}
           </span>
+          <BackgroundPicker value={bg} onChange={setBg} />
         </div>
         <GameBoard
           roomCode={roomCode}
           userId={playerId}
           gameState={gameState}
           onDrawCard={handleDrawCard}
+          onSubmitRule={sendSubmitRule}
+          onSubmitBan={sendSubmitBan}
+          onResolveBattle={sendResolveBattle}
+          onRestart={sendRestart}
+          onEndGame={sendEndGame}
+          onMakeHost={sendMakeHost}
+          onKick={sendKick}
+          onLeave={handleLeaveRoom}
         />
+        {displayError && (
+          <div className="mx-auto mt-3 w-full max-w-xs rounded-md border border-destructive/50 bg-destructive/10 p-3 text-center text-sm text-destructive">
+            {displayError}
+          </div>
+        )}
       </main>
     );
   }
 
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted to-background p-4">
+    <main data-bg={bg}
+      className={pageClass(bg, "min-h-screen flex items-center justify-center p-4")}>
       <Card className="w-full max-w-md backdrop-blur-sm">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold">Room Lobby</CardTitle>
@@ -125,6 +179,7 @@ function RoomPageContent() {
               {roomCode}
             </span>
           </CardDescription>
+          <BackgroundPicker value={bg} onChange={setBg} className="justify-center pt-2" />
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="space-y-3">
@@ -141,7 +196,7 @@ function RoomPageContent() {
                   No players yet
                 </div>
               ) : (
-                sortedPlayers.map((player, index) => (
+                sortedPlayers.map((player) => (
                   <div
                     key={player.id}
                     className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
@@ -157,15 +212,71 @@ function RoomPageContent() {
                         )}
                       </span>
                     </div>
-                    {index === 0 && (
-                      <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                        Host
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {player.id === currentHostId && (
+                        <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
+                          Host
+                        </span>
+                      )}
+                      {host && player.id !== playerId && (
+                        <PlayerActions
+                          playerName={player.name}
+                          onMakeHost={() => sendMakeHost(player.id)}
+                          onKick={() => sendKick(player.id)}
+                        />
+                      )}
+                    </div>
                   </div>
                 ))
               )}
             </div>
+          </div>
+
+          <div className="space-y-2 rounded-lg border bg-muted/50 p-3">
+            <label className="flex items-center justify-between gap-3 text-sm font-medium">
+              <span>Quick Flip Battle</span>
+              <input
+                type="checkbox"
+                className="h-4 w-4"
+                checked={state.quickFlipEnabled}
+                disabled={!host}
+                onChange={(e) => void sendSetQuickFlip(e.target.checked)}
+              />
+            </label>
+            {state.quickFlipEnabled && (
+              <fieldset className="flex items-center gap-4 text-sm" disabled={!host}>
+                <legend className="sr-only">Quick Flip challenge</legend>
+                {(
+                  [
+                    ["flip_cup", "Cups"],
+                    ["bottle_flip", "Bottles"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <label key={value} className="flex items-center gap-1.5">
+                    <input
+                      type="radio"
+                      name="challenge-type"
+                      value={value}
+                      checked={state.challengeType === value}
+                      onChange={() => void sendSetChallengeType(value)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+            )}
+            <p className="text-xs text-amber-600 dark:text-amber-400">
+              {state.quickFlipEnabled
+                ? `${
+                    state.challengeType === "bottle_flip"
+                      ? "Requires 2 water bottles."
+                      : "Requires 2 plastic solo cups."
+                  } Everyone plays the same challenge. Turn off to use Queen's Rule (create a rule) instead.`
+                : "Queen's Rule: whoever draws the Queen creates a rule."}
+            </p>
+            {!host && (
+              <p className="text-xs text-muted-foreground">Only the host can change this.</p>
+            )}
           </div>
 
           {host ? (

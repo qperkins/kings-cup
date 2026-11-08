@@ -3,12 +3,15 @@
 import { useState, useCallback, useMemo } from "react";
 import { AnimatePresence, LayoutGroup, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 import { PlayingCard } from "./PlayingCard";
 import { PlayerRing } from "./PlayerRing";
 import { RuleDisplay } from "./RuleDisplay";
 import { GameOverOverlay } from "./GameOverOverlay";
+import { RulesPanel } from "./RulesPanel";
+import type { Battle, PendingInput } from "@/lib/game/types";
 import type { CardData } from "./card-utils";
 import { CARD_SPRING } from "./card-utils";
 
@@ -47,6 +50,12 @@ export interface GameState {
   currentPlayer: CurrentPlayer | null;
   lastDrawnCard: CardData | null;
   lastCardRule?: string | null;
+  quickFlipEnabled?: boolean;
+  challengeType?: "flip_cup" | "bottle_flip";
+  rules?: string[];
+  bannedWords?: string[];
+  pendingInput?: PendingInput | null;
+  battle?: Battle | null;
 }
 
 interface GameBoardProps {
@@ -54,6 +63,14 @@ interface GameBoardProps {
   userId: string;
   gameState: GameState;
   onDrawCard: () => Promise<unknown>;
+  onSubmitRule?: (text: string) => Promise<unknown>;
+  onSubmitBan?: (word: string) => Promise<unknown>;
+  onResolveBattle?: (loserId: string | null) => Promise<unknown>;
+  onRestart?: () => Promise<unknown>;
+  onEndGame?: () => Promise<unknown>;
+  onMakeHost?: (playerId: string) => Promise<unknown>;
+  onKick?: (playerId: string) => Promise<unknown>;
+  onLeave?: () => Promise<unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -118,17 +135,16 @@ Going clockwise, each player must name something that fits the category.
 No repeats and use a short time limit; the first person who fails, repeats, or names something that doesn't fit drinks.`,
   },
   J: {
-    name: "Never Have I Ever",
-    description: `Everyone starts with 3 fingers up (or another number you choose).
-The player who drew the card says "Never have I ever..." followed by something they've never done.
-Anyone who has done that thing puts one finger down and drinks.
-You can do a quick mini-round (each player says one statement) or just one statement from the drawer.`,
+    name: "Jack's Trap",
+    description: `The player who drew the card types a word.
+That word is banned for the rest of the game.
+Anyone who says it drinks. Banned words stay listed in the Rules box.`,
   },
   Q: {
-    name: "Questions",
-    description: `Players enter a "questions only" mini-game.
-Starting with the player who drew the card and going clockwise, each player must speak only in questions directed at other players.
-If someone makes a statement, repeats a question, or takes too long to respond, that person drinks and the mini-game ends (unless you choose to continue).`,
+    name: "Queen's Rule",
+    description: `Create a rule!
+The player who drew the card types a rule that everyone must follow for the rest of the game.
+Break it and you drink. The rule stays listed in the Rules box.`,
   },
   K: {
     name: "King's Cup",
@@ -138,12 +154,54 @@ When the fourth King is drawn, the player who drew that fourth King must drink t
   },
 } as const;
 
+const QUICK_FLIP_HOWTO = {
+  flip_cup:
+    "Flip cup: set a cup on the table edge and flick the rim to land it upside down. (Needs 2 plastic solo cups.)",
+  bottle_flip:
+    "Water bottle flip: toss a bottle so it lands upright. (Needs 2 water bottles.)",
+} as const;
+
+function quickFlipRule(challenge: keyof typeof QUICK_FLIP_HOWTO) {
+  return {
+    name: "Quick Flip Battle",
+    description: `The game picks a random player to battle the player who drew the card.
+Both do the same challenge, one attempt each:
+${QUICK_FLIP_HOWTO[challenge]}
+The loser drinks.`,
+  };
+}
+
+const CHALLENGE_LABEL = { flip_cup: "Flip Cup", bottle_flip: "Water Bottle Flip" } as const;
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
+export function GameBoard({
+  userId,
+  gameState,
+  onDrawCard,
+  onSubmitRule,
+  onSubmitBan,
+  onResolveBattle,
+  onRestart,
+  onEndGame,
+  onMakeHost,
+  onKick,
+  onLeave,
+}: GameBoardProps) {
   const { game, currentPlayer, lastDrawnCard, lastCardRule } = gameState;
+  const quickFlipEnabled = gameState.quickFlipEnabled ?? true;
+  const challengeType = gameState.challengeType ?? "flip_cup";
+  const rules = gameState.rules ?? [];
+  const bannedWords = gameState.bannedWords ?? [];
+  const pendingInput = gameState.pendingInput ?? null;
+  const battle = gameState.battle ?? null;
+
+  const [inputText, setInputText] = useState("");
+  const [isBusy, setIsBusy] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   const [isDrawing, setIsDrawing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,7 +216,10 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
   const deckRemaining = Math.max(0, 52 - (game?.drawIndex ?? 0));
   const cardsDrawn = game?.drawIndex ?? 0;
   const roundNumber = game?.roundNumber ?? 1;
-  const isGameOver = kingsDrawn >= 4;
+  const isGameOver = game?.phase === "finished";
+  const fourKings = kingsDrawn >= 4;
+  const blocked = pendingInput !== null || battle !== null;
+  const nameOf = (id: string) => (lobbySnapshot.playerNames ?? {})[id] ?? "Someone";
 
   const players = useMemo(() => {
     const turnOrder = game?.turnOrder ?? [];
@@ -186,18 +247,47 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
     }
   }, [isMyTurn, isDrawing, onDrawCard]);
 
+  const runBusy = useCallback(async (fn?: () => Promise<unknown>) => {
+    if (!fn) return;
+    setIsBusy(true);
+    try {
+      await fn();
+    } finally {
+      setIsBusy(false);
+    }
+  }, []);
+
+  const submitInput = useCallback(async () => {
+    const text = inputText.trim();
+    if (!text || !pendingInput) return;
+    setIsBusy(true);
+    try {
+      const result = (await (pendingInput.kind === "rule"
+        ? onSubmitRule?.(text)
+        : onSubmitBan?.(text))) as { success?: boolean } | undefined;
+      if (result?.success !== false) setInputText("");
+    } finally {
+      setIsBusy(false);
+    }
+  }, [inputText, pendingInput, onSubmitRule, onSubmitBan]);
+
   // ── Early return (after all hooks) ──
   if (!game) return null;
 
   const drawnCardRank = lastDrawnCard?.rank ?? null;
   const drawnCardSuit = lastDrawnCard?.suit ?? null;
   const ruleForDisplay = lastCardRule ?? null;
+  const detailedRule = (() => {
+    if (!lastDrawnCard?.rank) return null;
+    if (lastDrawnCard.rank === "Q" && quickFlipEnabled) return quickFlipRule(challengeType);
+    return kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules] ?? null;
+  })();
 
   return (
     <LayoutGroup>
       <motion.div
         className="flex flex-col items-center gap-6 w-full max-w-lg mx-auto px-4 py-6"
-        animate={isGameOver ? { scale: [1, 1.02, 1] } : undefined}
+        animate={fourKings ? { scale: [1, 1.02, 1] } : undefined}
         transition={{ duration: 0.6 }}
       >
         {/* ── Player Ring ── */}
@@ -206,11 +296,17 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
           currentPlayerId={currentPlayer?.userId ?? null}
           userId={userId}
           hostId={hostId}
+          onMakeHost={isHost ? onMakeHost : undefined}
+          onKick={isHost ? onKick : undefined}
         />
 
         {/* ── Turn indicator text ── */}
         <p className="text-sm text-muted-foreground text-center">
-          {isMyTurn
+          {blocked
+            ? pendingInput
+              ? `${nameOf(pendingInput.player_id)} is ${pendingInput.kind === "rule" ? "creating a rule" : "choosing a banned word"}...`
+              : "Quick Flip Battle in progress..."
+            : isMyTurn
             ? "Your turn \u2014 draw a card!"
             : `Waiting for ${currentPlayer?.name ?? "someone"} to play...`}
         </p>
@@ -232,8 +328,8 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
             <div className="relative w-[9.8rem]">
               <PlayingCard
                 faceDown
-                disableHover={!isMyTurn}
-                onClick={isMyTurn && !isDrawing ? handleDraw : undefined}
+                disableHover={!isMyTurn || blocked}
+                onClick={isMyTurn && !isDrawing && !blocked ? handleDraw : undefined}
               />
             </div>
             <p className="text-center text-xs text-muted-foreground mt-1">
@@ -299,8 +395,85 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
           ))}
         </div>
 
+        {/* ── Rules created this game (Queen's Rules + Jack's Trap words) ── */}
+        <RulesPanel rules={rules} bannedWords={bannedWords} />
+
+        {/* ── Quick Flip Battle ── */}
+        {battle && (
+          <div className="w-full max-w-xs space-y-3 rounded-lg border-2 border-primary bg-card p-4 text-center">
+            <h3 className="text-lg font-bold">Quick Flip Battle!</h3>
+            <p className="text-sm">
+              <strong>{nameOf(battle.challenger_id)}</strong> vs{" "}
+              <strong>{nameOf(battle.opponent_id)}</strong>
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Challenge: {CHALLENGE_LABEL[battle.challenge]} — one attempt each. Loser drinks!
+            </p>
+            {battle.challenger_id === userId ? (
+              <div className="space-y-2">
+                <p className="text-xs text-muted-foreground">Who lost?</p>
+                <div className="flex gap-2">
+                  {[battle.challenger_id, battle.opponent_id].map((id) => (
+                    <Button
+                      key={id}
+                      variant="outline"
+                      className="flex-1"
+                      disabled={isBusy}
+                      onClick={() => runBusy(() => onResolveBattle?.(id) ?? Promise.resolve())}
+                    >
+                      {nameOf(id)}
+                    </Button>
+                  ))}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-full"
+                  disabled={isBusy}
+                  onClick={() => runBusy(() => onResolveBattle?.(null) ?? Promise.resolve())}
+                >
+                  Tie — no drink
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Waiting for {nameOf(battle.challenger_id)} to report the result...
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* ── Rule / banned-word entry (drawer only) ── */}
+        {pendingInput && pendingInput.player_id === userId && (
+          <form
+            className="w-full max-w-xs space-y-2 rounded-lg border-2 border-primary bg-card p-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void submitInput();
+            }}
+          >
+            <h3 className="font-bold">
+              {pendingInput.kind === "rule" ? "Create a rule" : "Ban a word"}
+            </h3>
+            <Input
+              autoFocus
+              value={inputText}
+              maxLength={pendingInput.kind === "rule" ? 120 : 40}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={
+                pendingInput.kind === "rule"
+                  ? "e.g. No pointing with fingers"
+                  : "e.g. drink"
+              }
+            />
+            <Button type="submit" className="w-full" disabled={isBusy || !inputText.trim()}>
+              {pendingInput.kind === "rule" ? "Add rule" : "Ban word"}
+            </Button>
+          </form>
+        )}
+
         {/* ── Action Buttons ── */}
-        {isMyTurn && !isGameOver && (
+        {isMyTurn && !isGameOver && !blocked && (
           <div className="flex gap-3 w-full max-w-xs">
             <Button
               onClick={handleDraw}
@@ -313,19 +486,17 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
         )}
 
         {/* ── Detailed Rules for Current Card ── */}
-        {lastDrawnCard?.rank && kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules] && (
+        {lastDrawnCard?.rank && detailedRule && (
           <motion.div
-            key={`rules-${lastDrawnCard.rank}`}
+            key={`rules-${lastDrawnCard.rank}-${quickFlipEnabled}-${challengeType}`}
             className="w-full max-w-xs rounded-lg border bg-card p-4"
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 300, damping: 30 }}
           >
-            <h3 className="font-bold text-lg mb-2">
-              {kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules].name}
-            </h3>
+            <h3 className="font-bold text-lg mb-2">{detailedRule.name}</h3>
             <p className="text-sm text-muted-foreground whitespace-pre-line">
-              {kingsCupRules[lastDrawnCard.rank as keyof typeof kingsCupRules].description}
+              {detailedRule.description}
             </p>
           </motion.div>
         )}
@@ -335,6 +506,80 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
           <span>Round {roundNumber}</span>
           <span>{cardsDrawn} drawn</span>
         </div>
+
+        {/* ── Host controls ── */}
+        {isHost && !isGameOver && (
+          <div className="flex w-full max-w-xs gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              disabled={isBusy}
+              onClick={() => runBusy(onRestart)}
+            >
+              Restart
+            </Button>
+            {confirmEnd ? (
+              <Button
+                variant="destructive"
+                size="sm"
+                className="flex-1"
+                disabled={isBusy}
+                onClick={() => {
+                  setConfirmEnd(false);
+                  void runBusy(onEndGame);
+                }}
+              >
+                Confirm end
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => setConfirmEnd(true)}
+              >
+                End game
+              </Button>
+            )}
+          </div>
+        )}
+
+        {/* ── Leave room (everyone) ── */}
+        {onLeave && (
+          <div className="w-full max-w-xs">
+            {confirmLeave ? (
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="flex-1"
+                  disabled={isBusy}
+                  onClick={() => void runBusy(onLeave)}
+                >
+                  Confirm leave
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => setConfirmLeave(false)}
+                >
+                  Stay
+                </Button>
+              </div>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="w-full text-muted-foreground"
+                onClick={() => setConfirmLeave(true)}
+              >
+                Leave room
+              </Button>
+            )}
+          </div>
+        )}
 
         {/* ── Error Message ── */}
         {error && (
@@ -357,6 +602,9 @@ export function GameBoard({ userId, gameState, onDrawCard }: GameBoardProps) {
             roundNumber={roundNumber}
             cardsDrawn={cardsDrawn}
             isHost={isHost}
+            showKingReveal={fourKings}
+            onPlayAgain={onRestart ? () => void runBusy(onRestart) : undefined}
+            isRestarting={isBusy}
           />
         )}
       </AnimatePresence>

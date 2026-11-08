@@ -20,6 +20,8 @@ interface GameOverOverlayProps {
   onPlayAgain?: () => void;
   /** True while the restart intent is in flight */
   isRestarting?: boolean;
+  /** Show the "4th King" reveal first (false when the host ended the game or the deck ran out) */
+  showKingReveal?: boolean;
 }
 
 export function GameOverOverlay({
@@ -30,14 +32,16 @@ export function GameOverOverlay({
   isHost,
   onPlayAgain,
   isRestarting,
+  showKingReveal = true,
 }: GameOverOverlayProps) {
   // Phase 1: King's Cup reveal, Phase 2: game over screen
-  const [phase, setPhase] = useState<1 | 2>(1);
+  const [phase, setPhase] = useState<1 | 2>(showKingReveal ? 1 : 2);
 
   useEffect(() => {
+    if (!showKingReveal) return;
     const timer = setTimeout(() => setPhase(2), 3500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showKingReveal]);
 
   return (
     <motion.div

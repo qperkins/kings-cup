@@ -70,10 +70,10 @@ const SUIT_SYMBOLS: Record<string, string> = {
 };
 
 const SUIT_COLORS: Record<string, string> = {
-  hearts: "text-red-500",
-  diamonds: "text-red-500",
-  clubs: "text-white",
-  spades: "text-white",
+  hearts: "text-red-600 dark:text-red-400",
+  diamonds: "text-red-600 dark:text-red-400",
+  clubs: "text-foreground",
+  spades: "text-foreground",
 };
 
 /** Unicode suit symbol (e.g. ♥) */
@@ -83,7 +83,7 @@ export function suitSymbol(suit: string): string {
 
 /** Tailwind color class for a suit */
 export function suitColorClass(suit: string): string {
-  return SUIT_COLORS[suit] ?? "text-white";
+  return SUIT_COLORS[suit] ?? "text-foreground";
 }
 
 /** Human-readable rank label (e.g. "Ace", "Jack", "10") */

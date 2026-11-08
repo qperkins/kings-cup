@@ -60,7 +60,7 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  --muted-foreground: oklch(0.44 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -124,3 +124,45 @@
     @apply bg-background text-foreground;
   }
 }
+/* ── Room background themes (per-player, chosen via BackgroundPicker) ──
+ * Text that sits directly on the page gradient uses --foreground and
+ * --muted-foreground, so every tinted theme pins those to values that keep
+ * >= 4.5:1 contrast on its own gradient, independent of light/dark mode.
+ * "midnight" is a dark surface in both modes: the page also gets the `dark`
+ * class (see pageClass in lib/useBackground.ts), which flips cards, borders
+ * and muted text with it. */
+.page-bg {
+  --page-from: var(--background);
+  --page-via: var(--muted);
+  /* body sets color from the root tokens; re-resolve here so a theme's overrides apply */
+  color: var(--foreground);
+  background-image: linear-gradient(
+    to bottom right,
+    var(--page-from),
+    var(--page-via),
+    var(--page-from)
+  );
+}
+[data-bg="ocean"]    { --page-from: oklch(0.93 0.05 230); --page-via: oklch(0.85 0.09 215); }
+[data-bg="forest"]   { --page-from: oklch(0.93 0.05 150); --page-via: oklch(0.84 0.09 160); }
+[data-bg="sunset"]   { --page-from: oklch(0.94 0.06 50);  --page-via: oklch(0.85 0.11 25); }
+[data-bg="grape"]    { --page-from: oklch(0.93 0.05 300); --page-via: oklch(0.84 0.10 310); }
+[data-bg="midnight"] { --page-from: oklch(0.24 0.06 265); --page-via: oklch(0.17 0.07 280); }
+.dark [data-bg="ocean"]    { --page-from: oklch(0.24 0.05 230); --page-via: oklch(0.32 0.08 215); }
+.dark [data-bg="forest"]   { --page-from: oklch(0.24 0.05 150); --page-via: oklch(0.31 0.08 160); }
+.dark [data-bg="sunset"]   { --page-from: oklch(0.26 0.06 40);  --page-via: oklch(0.33 0.10 20); }
+.dark [data-bg="grape"]    { --page-from: oklch(0.25 0.06 300); --page-via: oklch(0.32 0.10 310); }
+
+/* Light mode: darker text on the pastel tints (also fine on white cards). */
+[data-bg="ocean"], [data-bg="forest"], [data-bg="sunset"], [data-bg="grape"] {
+  --foreground: oklch(0.145 0 0);
+  --muted-foreground: oklch(0.38 0 0);
+}
+/* Dark mode: lighter muted text on the deep tints. */
+.dark [data-bg="ocean"], .dark [data-bg="forest"],
+.dark [data-bg="sunset"], .dark [data-bg="grape"] {
+  --foreground: oklch(0.985 0 0);
+  --muted-foreground: oklch(0.82 0 0);
+}
+/* Midnight is always dark; brighten muted text a little for the deep gradient. */
+[data-bg="midnight"] { --muted-foreground: oklch(0.8 0 0); }
