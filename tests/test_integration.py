@@ -21,7 +21,7 @@ async def test_full_join_start_draw_sequence(ws_server, wide_event_capture, monk
     from game_engine.models import Card, Rank, Suit
 
     monkeypatch.setattr(
-        engine, "new_deck", lambda: [Card(rank=Rank.TWO, suit=Suit.CLUBS) for _ in range(52)]
+        engine, "new_deck", lambda *_: [Card(rank=Rank.TWO, suit=Suit.CLUBS) for _ in range(52)]
     )
     room_id = f"integration-{uuid4()}"
     async with websockets.connect(f"{ws_server}/ws/{room_id}") as ws_a:
@@ -132,3 +132,23 @@ def test_wide_event_emitted_on_error_path(test_client, local_broadcast, wide_eve
     invalid = [e for e in events if e.get("outcome") == "invalid_message"]
     assert len(invalid) >= 1
     assert invalid[0]["error"]["type"] == "ValidationError"
+
+
+def test_non_json_frame_returns_error_and_keeps_socket_alive(test_client, local_broadcast):
+    """Regression: a non-JSON text frame used to raise JSONDecodeError out of the
+    handler, killing the socket without running disconnect cleanup."""
+    from uuid import uuid4
+
+    room_id = f"nonjson-{uuid4()}"
+    with test_client.websocket_connect(f"/ws/{room_id}") as ws:
+        ws.send_text("this is not json")
+        msg = ws.receive_json()
+        assert msg["type"] == "error"
+        # Socket is still usable: a valid join afterwards works.
+        ws.send_json({"type": "join", "action_id": str(uuid4()), "player_name": "Ann"})
+        seen = []
+        for _ in range(5):
+            seen.append(ws.receive_json()["type"])
+            if "state_sync" in seen:
+                break
+        assert "state_sync" in seen

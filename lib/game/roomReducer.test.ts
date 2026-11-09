@@ -150,3 +150,131 @@ describe("membership and host events", () => {
     expect(s.players.map((p) => p.id)).toEqual(["a", "b", "c", "d"]);
   });
 });
+
+describe("card-drawn popup bookkeeping", () => {
+  it("card_drawn records the drawer and bumps drawSeq", () => {
+    const s = reduceRoomEvent(base, "card_drawn", {
+      player_id: "p1",
+      card: { rank: "7", suit: "hearts" },
+      rule_text: "Point to heaven",
+      cards_remaining: 51,
+    });
+    expect(s.lastDrawnBy).toBe("p1");
+    expect(s.drawSeq).toBe(1);
+  });
+
+  it("state_sync never bumps drawSeq (no replayed popups on reconnect)", () => {
+    let s = reduceRoomEvent(base, "card_drawn", {
+      player_id: "p1",
+      card: { rank: "7", suit: "hearts" },
+      rule_text: "x",
+      cards_remaining: 51,
+    });
+    s = reduceRoomEvent(s, "state_sync", {
+      room_id: "ROOM",
+      phase: "in_progress",
+      players: [],
+      current_turn_seat: 0,
+      cards_remaining: 51,
+      kings_drawn: 0,
+      your_player_id: "p1",
+      drawn_pile_top: { rank: "7", suit: "hearts", rule_text: "x" },
+    });
+    expect(s.drawSeq).toBe(1);
+  });
+});
+
+describe("drinking mates", () => {
+  it("mate_chosen adds a pair and clears the pending pick", () => {
+    let s = reduceRoomEvent(base, "input_required", {
+      pending_input: { player_id: "a", kind: "mate" },
+      battle: null,
+    });
+    expect(s.pendingInput?.kind).toBe("mate");
+    s = reduceRoomEvent(s, "mate_chosen", { player_id: "a", mate_id: "b" });
+    expect(s.pendingInput).toBeNull();
+    expect(s.mates).toEqual([["a", "b"]]);
+  });
+
+  it("mate_chosen ignores a duplicate pair in either direction", () => {
+    let s = reduceRoomEvent(base, "mate_chosen", { player_id: "a", mate_id: "b" });
+    s = reduceRoomEvent(s, "mate_chosen", { player_id: "b", mate_id: "a" });
+    expect(s.mates).toHaveLength(1);
+  });
+
+  it("state_sync rehydrates mates and game_restarted clears them", () => {
+    const view = (mates: unknown) => ({
+      room_id: "ROOM",
+      phase: "in_progress",
+      players: [],
+      current_turn_seat: 0,
+      cards_remaining: 40,
+      kings_drawn: 0,
+      your_player_id: "a",
+      drawn_pile_top: null,
+      mates,
+    });
+    let s = reduceRoomEvent(base, "state_sync", view([["a", "b"], ["bad"]]));
+    expect(s.mates).toEqual([["a", "b"]]);
+    s = reduceRoomEvent(s, "game_restarted", view([]));
+    expect(s.mates).toEqual([]);
+  });
+});
+
+describe("lobby order", () => {
+  it("players_reordered replaces the roster in seat order", () => {
+    let s = reduceRoomEvent(base, "player_joined", { id: "a", name: "A", seat: 0, connected: true });
+    s = reduceRoomEvent(s, "player_joined", { id: "b", name: "B", seat: 1, connected: true });
+    s = reduceRoomEvent(s, "players_reordered", {
+      players: [
+        { id: "b", name: "B", seat: 0, connected: true },
+        { id: "a", name: "A", seat: 1, connected: true },
+      ],
+    });
+    expect(s.players.map((p) => p.id)).toEqual(["b", "a"]);
+  });
+});
+
+describe("Royal Mayhem", () => {
+  it("settings_updated switches game mode; a 64-card deck is used on start", () => {
+    let s = reduceRoomEvent(base, "settings_updated", {
+      quick_flip_enabled: true,
+      challenge_type: "flip_cup",
+      game_mode: "royal_mayhem",
+    });
+    expect(s.gameMode).toBe("royal_mayhem");
+    s = reduceRoomEvent(s, "game_started", { player_count: 3 });
+    expect(s.cardsRemaining).toBe(64);
+  });
+
+  it("a wildcard draw parses to a wildId card; Kings of Chaos count as Kings", () => {
+    let s = reduceRoomEvent(base, "card_drawn", {
+      player_id: "p1",
+      card: { rank: null, suit: null, kind: "wild", wild_id: "jester" },
+      rule_text: "Jester's Folly",
+      cards_remaining: 60,
+    });
+    expect(s.lastDrawnCard?.wildId).toBe("jester");
+    expect(s.kingsDrawn).toBe(0);
+    s = reduceRoomEvent(s, "card_drawn", {
+      player_id: "p2",
+      card: { rank: null, suit: null, kind: "wild", wild_id: "king_chaos_a" },
+      rule_text: "King of Chaos",
+      cards_remaining: 59,
+    });
+    expect(s.kingsDrawn).toBe(1);
+  });
+
+  it("direction_changed and mate_broken update state", () => {
+    let s = reduceRoomEvent(base, "direction_changed", { direction: -1 });
+    expect(s.direction).toBe(-1);
+    s = reduceRoomEvent({ ...s, mates: [["a", "b"], ["b", "c"]] }, "mate_broken", {
+      player_id: "x",
+      a: "c",
+      b: "b",
+    });
+    expect(s.mates).toEqual([["a", "b"]]);
+    expect(s.lastBroken).toEqual(["c", "b"]);
+    expect(s.brokenSeq).toBe(1);
+  });
+});

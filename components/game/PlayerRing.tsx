@@ -1,5 +1,6 @@
 "use client";
 
+import { mateBadgeLabel } from "@/lib/game/mateBadge";
 import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { PlayerActions } from "./PlayerActions";
@@ -14,6 +15,8 @@ interface PlayerRingProps {
   currentPlayerId: string | null;
   userId: string;
   hostId: string | null;
+  /** Drinking-mate links; each linked player gets a heart badge. */
+  mates?: [string, string][];
   /** Passed only to the host; shows a per-player menu for everyone else. */
   onMakeHost?: (playerId: string) => Promise<unknown>;
   onKick?: (playerId: string) => Promise<unknown>;
@@ -24,6 +27,7 @@ export function PlayerRing({
   currentPlayerId,
   userId,
   hostId,
+  mates = [],
   onMakeHost,
   onKick,
 }: PlayerRingProps) {
@@ -34,6 +38,10 @@ export function PlayerRing({
         const isYou = player.userId === userId;
         const isHost = player.userId === hostId;
         const initial = (player.name ?? "?").charAt(0).toUpperCase();
+        const mateNames = mates
+          .filter((pair) => pair.includes(player.userId))
+          .map((pair) => (pair[0] === player.userId ? pair[1] : pair[0]))
+          .map((id) => players.find((p) => p.userId === id)?.name ?? "?");
 
         return (
           <div
@@ -55,6 +63,7 @@ export function PlayerRing({
                 isCurrent
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground",
+                isCurrent && isYou && "draw-glow",
               )}
             >
               {initial}
@@ -78,6 +87,16 @@ export function PlayerRing({
                 onMakeHost={() => onMakeHost(player.userId)}
                 onKick={() => onKick(player.userId)}
               />
+            )}
+
+            {mateNames.length > 0 && (
+              <span
+                className="absolute -left-2 -top-2 flex items-center gap-0.5 rounded-full bg-pink-600 px-1 text-[10px] text-white"
+                title={`Mates: ${mateNames.join(", ")}`}
+              >
+                &#10084;&#65039;
+                {mateBadgeLabel(mateNames)}
+              </span>
             )}
 
             {/* Badges */}

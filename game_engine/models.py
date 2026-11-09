@@ -38,11 +38,51 @@ class Rank(str, Enum):
     ACE = "A"
 
 
+# ---- Royal Mayhem "Court of Chaos" wildcards (12 extra cards) ----
+
+WILD_DRINK = "1 shot (or 3 drinks)"
+
+# wild_id -> one-line rule text. Ids are the wire identifiers the client maps to art.
+WILD_RULES: dict[str, str] = {
+    "jester": f"Jester's Folly — do a dare or impression the table picks, or take {WILD_DRINK}",
+    "reverse": "Reverse Decree — turn order reverses",
+    "exile": f"Exile — the next player is skipped and takes {WILD_DRINK}",
+    "encore": "Royal Encore — draw again!",
+    "plague": f"Plague of Thirst — everyone takes {WILD_DRINK}",
+    "pardon": "Royal Pardon — cancel one drink aimed at you, any time",
+    "silence": f"Decree of Silence — name a banned gesture or word until your next turn; anyone who does it takes {WILD_DRINK}",
+    "scepter": "Scepter Showdown — rock-paper-scissors vs a random player, best of 3. Loser takes 3 drinks",
+    "duel": f"Royal Duel — pick an opponent for a battle. Loser takes {WILD_DRINK}",
+    "treason": f"Treason — break a drinking-mate pair; both ex-mates take {WILD_DRINK}",
+    "king_chaos_a": "King of Chaos — counts as a King",
+    "king_chaos_b": "King of Chaos — counts as a King",
+}
+WILD_KING_IDS = frozenset({"king_chaos_a", "king_chaos_b"})
+
+GameMode = Literal["classic", "royal_mayhem"]
+# How many Kings end the game (and trigger the King's Cup) in each mode.
+KINGS_TO_END: dict[str, int] = {"classic": 4, "royal_mayhem": 6}
+DECK_SIZE: dict[str, int] = {"classic": 52, "royal_mayhem": 52 + len(WILD_RULES)}
+
+
 class Card(BaseModel):
-    rank: Rank
-    suit: Suit
+    # Standard cards have rank + suit; wildcards have kind="wild" and a wild_id.
+    rank: Rank | None = None
+    suit: Suit | None = None
+    kind: Literal["standard", "wild"] = "standard"
+    wild_id: str | None = None
+
+    @property
+    def is_wild(self) -> bool:
+        return self.kind == "wild"
+
+    @property
+    def is_king(self) -> bool:
+        return self.rank == Rank.KING or self.wild_id in WILD_KING_IDS
 
     def rule_text(self, quick_flip: bool = False) -> str:
+        if self.is_wild:
+            return WILD_RULES[self.wild_id or ""]
         # King's Cup rule mapping — extend/replace with your own house rules.
         # quick_flip selects the Queen variant (lobby setting).
         queen = "Quick Flip Battle" if quick_flip else "Queen's Rule"
@@ -53,7 +93,7 @@ class Card(BaseModel):
             Rank.FIVE: "Guys drink",
             Rank.SIX: "Ladies drink",
             Rank.SEVEN: "Point to heaven — last one drinks",
-            Rank.EIGHT: "Mate — pick a drinking buddy",
+            Rank.EIGHT: "Mate — pick a drinking buddy (you drink, they drink)",
             Rank.NINE: "Rhyme — say a word, go around rhyming",
             Rank.TEN: "Categories",
             Rank.JACK: "Jack's Trap",
@@ -77,9 +117,10 @@ class GamePhase(str, Enum):
 
 
 class PendingInput(BaseModel):
-    """A player must type something (a rule or a banned word) before play continues."""
+    """A player must type something (a rule or a banned word) or pick a mate
+    before play continues."""
     player_id: str
-    kind: Literal["rule", "word_ban"]
+    kind: Literal["rule", "word_ban", "mate", "duel", "treason"]
 
 
 class Battle(BaseModel):
@@ -88,6 +129,11 @@ class Battle(BaseModel):
     challenger_id: str
     opponent_id: str
     challenge: Literal["flip_cup", "bottle_flip"]
+    # "challenge" = Queen's Quick Flip (flip cup / bottle flip, random opponent).
+    # "rps"       = Scepter Showdown wildcard: rock-paper-scissors best of 3 in person,
+    #               random opponent, loser takes 3 drinks. No ties are reportable.
+    # "duel"      = Royal Duel wildcard: like "challenge" but the drawer picked the opponent.
+    kind: Literal["challenge", "rps", "duel"] = "challenge"
 
 
 class GameState(BaseModel):
@@ -106,6 +152,12 @@ class GameState(BaseModel):
     banned_words: list[str] = Field(default_factory=list)
     pending_input: PendingInput | None = None
     battle: Battle | None = None
+    # Drinking-mate links created by drawing an 8: [drawer_id, mate_id] pairs.
+    # A player can appear in several pairs; there is no chaining between pairs.
+    mates: list[list[str]] = Field(default_factory=list)
+    game_mode: GameMode = "classic"
+    # +1 = ascending seats, -1 = reversed by the Reverse Decree wildcard.
+    direction: int = 1
     # Explicit host. None only before the first join; host() falls back to the lowest seat.
     host_id: str | None = None
     # Which Quick Flip challenge this table uses (set once by the host in the lobby).
@@ -157,7 +209,10 @@ class GameState(BaseModel):
             'host_id': str | None,
             'rules': [str, ...],
             'banned_words': [str, ...],
-            'pending_input': {'player_id': str, 'kind': 'rule' | 'word_ban'} | None,
+            'pending_input': {'player_id': str, 'kind': 'rule' | 'word_ban' | 'mate'} | None,
+            'mates': [[drawer_id, mate_id], ...],
+            'game_mode': 'classic' | 'royal_mayhem',
+            'direction': 1 | -1,
             'battle': {'challenger_id': str, 'opponent_id': str,
                        'challenge': 'flip_cup' | 'bottle_flip'} | None,
             
@@ -187,11 +242,16 @@ class GameState(BaseModel):
             "banned_words": list(self.banned_words),
             "pending_input": self.pending_input.model_dump() if self.pending_input else None,
             "battle": self.battle.model_dump() if self.battle else None,
+            "mates": [list(pair) for pair in self.mates],
+            "game_mode": self.game_mode,
+            "direction": self.direction,
         }
 
 
-def new_deck() -> list[Card]:
+def new_deck(mode: str = "classic") -> list[Card]:
     deck = [Card(rank=r, suit=s) for r in Rank for s in Suit]
+    if mode == "royal_mayhem":
+        deck += [Card(kind="wild", wild_id=wid) for wid in WILD_RULES]
     random.shuffle(deck)
     return deck
 
@@ -230,6 +290,19 @@ class SetChallengeTypeIntent(BaseModel):
     challenge_type: Literal["flip_cup", "bottle_flip"]
 
 
+class ReorderPlayersIntent(BaseModel):
+    type: Literal["reorder_players"] = "reorder_players"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+    order: list[str]  # every current player id, in the desired turn order
+
+
+class ShufflePlayersIntent(BaseModel):
+    type: Literal["shuffle_players"] = "shuffle_players"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+
+
 class LeaveRoomIntent(BaseModel):
     type: Literal["leave_room"] = "leave_room"
     action_id: str = Field(default_factory=lambda: str(uuid4()))
@@ -264,6 +337,37 @@ class SubmitBanIntent(BaseModel):
     word: str
 
 
+class ChooseMateIntent(BaseModel):
+    type: Literal["choose_mate"] = "choose_mate"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+    mate_id: str
+
+
+class ChooseTargetIntent(BaseModel):
+    """Royal Duel: the drawer picks who they battle."""
+    type: Literal["choose_target"] = "choose_target"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+    target_id: str
+
+
+class BreakMateIntent(BaseModel):
+    """Treason: the drawer breaks one drinking-mate pair."""
+    type: Literal["break_mate"] = "break_mate"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+    a: str
+    b: str
+
+
+class SetGameModeIntent(BaseModel):
+    type: Literal["set_game_mode"] = "set_game_mode"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+    mode: GameMode
+
+
 class ResolveBattleIntent(BaseModel):
     type: Literal["resolve_battle"] = "resolve_battle"
     action_id: str = Field(default_factory=lambda: str(uuid4()))
@@ -289,11 +393,17 @@ ActionIntent = (
     | StartGameIntent
     | SetQuickFlipIntent
     | SetChallengeTypeIntent
+    | ReorderPlayersIntent
+    | ShufflePlayersIntent
     | LeaveRoomIntent
     | KickPlayerIntent
     | MakeHostIntent
     | SubmitRuleIntent
     | SubmitBanIntent
+    | ChooseMateIntent
+    | ChooseTargetIntent
+    | BreakMateIntent
+    | SetGameModeIntent
     | ResolveBattleIntent
     | RestartGameIntent
     | EndGameIntent

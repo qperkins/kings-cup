@@ -3,21 +3,24 @@
 import { AnimatePresence, motion } from "motion/react";
 import { cn } from "@/lib/utils";
 import { rankLabel, suitSymbol, suitColorClass } from "./card-utils";
+import { WILD_CARDS } from "./wild-cards";
 
 interface RuleDisplayProps {
   rank: string | null;
   suit: string | null;
   rule: string | null;
+  /** Royal Mayhem wildcard id; replaces the rank/suit label. */
+  wildId?: string | null;
 }
 
-export function RuleDisplay({ rank, suit, rule }: RuleDisplayProps) {
+export function RuleDisplay({ rank, suit, rule, wildId }: RuleDisplayProps) {
   const visible = rank !== null && rule !== null;
 
   return (
     <AnimatePresence mode="wait">
       {visible && (
         <motion.div
-          key={`${rank}-${suit}-${rule}`}
+          key={`${rank}-${suit}-${wildId}-${rule}`}
           initial={{ opacity: 0, scale: 0.9, y: 8 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: -4 }}
@@ -25,10 +28,18 @@ export function RuleDisplay({ rank, suit, rule }: RuleDisplayProps) {
           className="flex flex-col items-center gap-1 rounded-xl bg-card/80 backdrop-blur-md border px-6 py-4"
         >
           <span className="text-sm text-muted-foreground">
-            {rankLabel(rank!)}{" "}
-            <span className={cn(suitColorClass(suit ?? ""))}>
-              {suitSymbol(suit ?? "")}
-            </span>
+            {wildId && WILD_CARDS[wildId] ? (
+              <>
+                {WILD_CARDS[wildId].emoji} Court of Chaos
+              </>
+            ) : (
+              <>
+                {rankLabel(rank!)}{" "}
+                <span className={cn(suitColorClass(suit ?? ""))}>
+                  {suitSymbol(suit ?? "")}
+                </span>
+              </>
+            )}
           </span>
           <span className="text-xl font-bold">{rule}</span>
         </motion.div>

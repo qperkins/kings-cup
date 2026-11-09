@@ -31,11 +31,16 @@ const EVENT_TYPES = [
   "game_finished",
   "settings_updated",
   "host_changed",
+  "players_reordered",
   "player_removed",
   "input_required",
   "rule_added",
   "word_banned",
   "battle_resolved",
+  "mate_chosen",
+  "mate_broken",
+  "direction_changed",
+  "player_exiled",
   "game_restarted",
   "action_success",
   "error",
@@ -269,6 +274,25 @@ export function useRoomSocket(roomId: string, playerName: string) {
     (word: string) => sendSimple({ type: "submit_ban", word }, "Failed to ban word"),
     [sendSimple],
   );
+  const sendChooseMate = useCallback(
+    (mateId: string) =>
+      sendSimple({ type: "choose_mate", mate_id: mateId }, "Failed to choose mate"),
+    [sendSimple],
+  );
+  const sendChooseTarget = useCallback(
+    (targetId: string) =>
+      sendSimple({ type: "choose_target", target_id: targetId }, "Failed to pick opponent"),
+    [sendSimple],
+  );
+  const sendBreakMate = useCallback(
+    (a: string, b: string) => sendSimple({ type: "break_mate", a, b }, "Failed to break mates"),
+    [sendSimple],
+  );
+  const sendSetGameMode = useCallback(
+    (mode: "classic" | "royal_mayhem") =>
+      sendSimple({ type: "set_game_mode", mode }, "Failed to update game mode"),
+    [sendSimple],
+  );
   const sendResolveBattle = useCallback(
     (loserId: string | null) =>
       sendSimple({ type: "resolve_battle", loser_id: loserId }, "Failed to report result"),
@@ -289,6 +313,15 @@ export function useRoomSocket(roomId: string, playerName: string) {
         { type: "set_challenge_type", challenge_type: challengeType },
         "Failed to update setting",
       ),
+    [sendSimple],
+  );
+  const sendReorderPlayers = useCallback(
+    (order: string[]) =>
+      sendSimple({ type: "reorder_players", order }, "Failed to reorder players"),
+    [sendSimple],
+  );
+  const sendShufflePlayers = useCallback(
+    () => sendSimple({ type: "shuffle_players" }, "Failed to randomize order"),
     [sendSimple],
   );
   const sendKick = useCallback(
@@ -331,11 +364,17 @@ export function useRoomSocket(roomId: string, playerName: string) {
     sendSubmitRule,
     sendSubmitBan,
     sendResolveBattle,
+    sendChooseMate,
+    sendChooseTarget,
+    sendBreakMate,
+    sendSetGameMode,
     sendRestart,
     sendEndGame,
     sendSetChallengeType,
     sendKick,
     sendMakeHost,
+    sendReorderPlayers,
+    sendShufflePlayers,
     leaveRoom,
     removedReason,
     disconnect,

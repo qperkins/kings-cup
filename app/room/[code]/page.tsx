@@ -13,7 +13,7 @@ import {
 import { GameBoard } from "@/components/game/GameBoard";
 import { useRoomSocket } from "@/lib/game/useRoomSocket";
 import { hostIdOf, isHost, toGameState } from "@/lib/game/types";
-import { PlayerActions } from "@/components/game/PlayerActions";
+import { LobbyPlayerList } from "@/components/game/LobbyPlayerList";
 import { BackgroundPicker } from "@/components/BackgroundPicker";
 import { pageClass, useBackground } from "@/lib/useBackground";
 
@@ -47,11 +47,17 @@ function RoomPageContent() {
     sendSubmitRule,
     sendSubmitBan,
     sendResolveBattle,
+    sendChooseMate,
+    sendChooseTarget,
+    sendBreakMate,
+    sendSetGameMode,
     sendRestart,
     sendEndGame,
     sendSetChallengeType,
     sendKick,
     sendMakeHost,
+    sendReorderPlayers,
+    sendShufflePlayers,
     leaveRoom,
     removedReason,
   } = useRoomSocket(roomCode, playerName);
@@ -153,6 +159,9 @@ function RoomPageContent() {
           onSubmitRule={sendSubmitRule}
           onSubmitBan={sendSubmitBan}
           onResolveBattle={sendResolveBattle}
+          onChooseMate={sendChooseMate}
+          onChooseTarget={sendChooseTarget}
+          onBreakMate={sendBreakMate}
           onRestart={sendRestart}
           onEndGame={sendEndGame}
           onMakeHost={sendMakeHost}
@@ -196,41 +205,59 @@ function RoomPageContent() {
                   No players yet
                 </div>
               ) : (
-                sortedPlayers.map((player) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground font-medium">
-                        {player.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-medium">
-                        {player.name}
-                        {player.id === playerId && (
-                          <span className="text-muted-foreground ml-2">(you)</span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {player.id === currentHostId && (
-                        <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded">
-                          Host
-                        </span>
-                      )}
-                      {host && player.id !== playerId && (
-                        <PlayerActions
-                          playerName={player.name}
-                          onMakeHost={() => sendMakeHost(player.id)}
-                          onKick={() => sendKick(player.id)}
-                        />
-                      )}
-                    </div>
-                  </div>
-                ))
+                <LobbyPlayerList
+                  players={sortedPlayers}
+                  playerId={playerId}
+                  hostId={currentHostId}
+                  canReorder={host}
+                  onReorder={sendReorderPlayers}
+                  onShuffle={sendShufflePlayers}
+                  onMakeHost={sendMakeHost}
+                  onKick={sendKick}
+                />
               )}
             </div>
           </div>
+
+          <fieldset
+            className="space-y-2 rounded-lg border bg-muted/50 p-3"
+            disabled={!host}
+          >
+            <legend className="px-1 text-sm font-medium">Game mode</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(
+                [
+                  ["classic", "Classic", "Standard 52-card Kings Cup."],
+                  [
+                    "royal_mayhem",
+                    "\u{1F451} Royal Mayhem",
+                    "12 Court of Chaos wildcards, 6 Kings to end it.",
+                  ],
+                ] as const
+              ).map(([value, label, blurb]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={state.gameMode === value}
+                  onClick={() => void sendSetGameMode(value)}
+                  className={
+                    "rounded-lg border-2 p-2 text-left text-sm transition-colors " +
+                    (state.gameMode === value
+                      ? value === "royal_mayhem"
+                        ? "border-purple-600 bg-purple-600/15"
+                        : "border-primary bg-primary/10"
+                      : "border-transparent bg-background/60 hover:bg-background")
+                  }
+                >
+                  <span className="block font-semibold">{label}</span>
+                  <span className="block text-xs text-muted-foreground">{blurb}</span>
+                </button>
+              ))}
+            </div>
+            {!host && (
+              <p className="text-xs text-muted-foreground">Only the host can change this.</p>
+            )}
+          </fieldset>
 
           <div className="space-y-2 rounded-lg border bg-muted/50 p-3">
             <label className="flex items-center justify-between gap-3 text-sm font-medium">
@@ -287,6 +314,7 @@ function RoomPageContent() {
                 </p>
               ) : null}
               <Button
+                variant="cue"
                 onClick={handleStartGame}
                 disabled={
                   !playerId ||
@@ -294,7 +322,7 @@ function RoomPageContent() {
                   isStarting ||
                   gameActive
                 }
-                className="w-full"
+                className="h-11 w-full text-base"
               >
                 {isStarting ? "Starting..." : "Start Game"}
               </Button>

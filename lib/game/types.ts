@@ -1,5 +1,6 @@
 import type { CardData } from "@/components/game/card-utils";
 import type { GameState } from "@/components/game/GameBoard";
+import { DECK_SIZE, type GameMode } from "../../components/game/wild-cards";
 
 export type RoomPhase = "lobby" | "in_progress" | "finished";
 
@@ -12,8 +13,11 @@ export interface Player {
 
 export interface PendingInput {
   player_id: string;
-  kind: "rule" | "word_ban";
+  kind: "rule" | "word_ban" | "mate" | "duel" | "treason";
 }
+
+/** [drawer_id, mate_id]. Order is not meaningful. */
+export type MatePair = [string, string];
 
 export type ChallengeType = "flip_cup" | "bottle_flip";
 
@@ -21,6 +25,8 @@ export interface Battle {
   challenger_id: string;
   opponent_id: string;
   challenge: ChallengeType;
+  /** "challenge" = Queen's Quick Flip, "rps" = Scepter Showdown, "duel" = Royal Duel. */
+  kind?: "challenge" | "rps" | "duel";
 }
 
 export interface StateSyncPayload {
@@ -40,6 +46,9 @@ export interface StateSyncPayload {
   banned_words?: string[];
   pending_input?: PendingInput | null;
   battle?: Battle | null;
+  mates?: MatePair[];
+  game_mode?: GameMode;
+  direction?: 1 | -1;
 }
 
 export interface RoomState {
@@ -52,6 +61,10 @@ export interface RoomState {
   cardsDrawn: number;
   lastDrawnCard: CardData | null;
   lastCardRule: string | null;
+  /** Player who drew lastDrawnCard (live events only; null after a sync). */
+  lastDrawnBy: string | null;
+  /** Bumped on every live card_drawn event; never by state_sync (no replayed popups). */
+  drawSeq: number;
   quickFlipEnabled: boolean;
   challengeType: ChallengeType;
   hostId: string | null;
@@ -59,6 +72,13 @@ export interface RoomState {
   bannedWords: string[];
   pendingInput: PendingInput | null;
   battle: Battle | null;
+  mates: MatePair[];
+  /** Last pair broken by Treason + a counter bumped per live mate_broken (never by state_sync). */
+  lastBroken: MatePair | null;
+  brokenSeq: number;
+  gameMode: GameMode;
+  /** 1 = normal turn order, -1 = reversed by a Reverse Decree. */
+  direction: 1 | -1;
   connected: boolean;
   joining: boolean;
 }
@@ -73,6 +93,8 @@ export const initialRoomState = (roomId: string): RoomState => ({
   cardsDrawn: 0,
   lastDrawnCard: null,
   lastCardRule: null,
+  lastDrawnBy: null,
+  drawSeq: 0,
   quickFlipEnabled: true,
   challengeType: "flip_cup",
   hostId: null,
@@ -80,6 +102,11 @@ export const initialRoomState = (roomId: string): RoomState => ({
   bannedWords: [],
   pendingInput: null,
   battle: null,
+  mates: [],
+  lastBroken: null,
+  brokenSeq: 0,
+  gameMode: "classic",
+  direction: 1,
   connected: false,
   joining: true,
 });
@@ -115,9 +142,10 @@ export function toGameState(state: RoomState): GameState {
   const current = activePlayer(state);
 
   // Lobby deck is empty server-side; cards_remaining is meaningless until start.
+  const deckSize = DECK_SIZE[state.gameMode];
   const cardsRemaining =
-    state.phase === "lobby" ? 52 : state.cardsRemaining;
-  const drawIndex = 52 - cardsRemaining;
+    state.phase === "lobby" ? deckSize : state.cardsRemaining;
+  const drawIndex = deckSize - cardsRemaining;
   return {
     game: {
       phase: state.phase,
@@ -138,11 +166,18 @@ export function toGameState(state: RoomState): GameState {
       : null,
     lastDrawnCard: state.lastDrawnCard,
     lastCardRule: state.lastCardRule,
+    lastDrawnBy: state.lastDrawnBy,
+    drawSeq: state.drawSeq,
     quickFlipEnabled: state.quickFlipEnabled,
     challengeType: state.challengeType,
     rules: state.rules,
     bannedWords: state.bannedWords,
     pendingInput: state.pendingInput,
     battle: state.battle,
+    mates: state.mates,
+    lastBroken: state.lastBroken,
+    brokenSeq: state.brokenSeq,
+    gameMode: state.gameMode,
+    direction: state.direction,
   };
 }

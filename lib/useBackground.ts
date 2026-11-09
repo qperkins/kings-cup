@@ -7,8 +7,10 @@ export const BACKGROUNDS = [
   { id: "ocean", label: "Ocean", swatch: "oklch(0.7 0.12 225)" },
   { id: "forest", label: "Forest", swatch: "oklch(0.65 0.12 155)" },
   { id: "sunset", label: "Sunset", swatch: "oklch(0.72 0.15 40)" },
+  { id: "red", label: "Red", swatch: "oklch(0.64 0.2 22)" },
+  { id: "pink", label: "Pink", swatch: "oklch(0.78 0.14 350)" },
   { id: "grape", label: "Grape", swatch: "oklch(0.62 0.15 305)" },
-  { id: "midnight", label: "Midnight", swatch: "oklch(0.3 0.07 270)" },
+  { id: "midnight", label: "Navy", swatch: "oklch(0.3 0.09 250)" },
 ] as const;
 
 export type BackgroundId = (typeof BACKGROUNDS)[number]["id"];

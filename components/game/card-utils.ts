@@ -7,6 +7,8 @@ export type CardData = {
   id: string;
   rank: string;
   suit: string;
+  /** Set for Royal Mayhem wildcards (rank/suit are then empty strings). */
+  wildId?: string;
 };
 
 // Natural dimensions of each card inside svg-cards.svg

@@ -9,6 +9,8 @@ rather than several scattered log lines -- see WideEvent usage below.
 """
 from __future__ import annotations
 
+import json
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from pydantic import TypeAdapter, ValidationError
 
@@ -69,7 +71,16 @@ async def room_socket(websocket: WebSocket, room_id: str):
 
     try:
         while True:
-            raw = await websocket.receive_json()
+            text = await websocket.receive_text()
+            try:
+                raw = json.loads(text)
+            except ValueError:
+                # Non-JSON frame: answer with an error instead of letting the
+                # exception tear down the socket (which skipped disconnect cleanup).
+                await websocket.send_json(
+                    ServerEvent(type="error", payload={"detail": "Message must be valid JSON"}).model_dump()
+                )
+                continue
 
             with WideEvent("message_processed", room_id=room_id) as event:
                 # Pre-join rate limiting: check by connection IP before player_id exists.

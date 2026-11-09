@@ -1,8 +1,10 @@
 import type { CardData } from "@/components/game/card-utils";
+import { DECK_SIZE, isWildKing, type GameMode } from "../../components/game/wild-cards";
 import {
   cardId,
   initialRoomState,
   type ChallengeType,
+  type MatePair,
   type Player,
   type RoomPhase,
   type RoomState,
@@ -23,8 +25,27 @@ function parsePlayer(raw: unknown): Player | null {
   };
 }
 
+function parseMates(raw: unknown): MatePair[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (m): m is MatePair =>
+      Array.isArray(m) &&
+      m.length === 2 &&
+      typeof m[0] === "string" &&
+      typeof m[1] === "string",
+  );
+}
+
 function parseChallenge(raw: unknown, fallback: ChallengeType): ChallengeType {
   return raw === "flip_cup" || raw === "bottle_flip" ? raw : fallback;
+}
+
+function parseGameMode(raw: unknown, fallback: GameMode): GameMode {
+  return raw === "classic" || raw === "royal_mayhem" ? raw : fallback;
+}
+
+function parseDirection(raw: unknown, fallback: 1 | -1): 1 | -1 {
+  return raw === 1 || raw === -1 ? raw : fallback;
 }
 
 function parsePhase(raw: unknown): RoomPhase {
@@ -37,6 +58,14 @@ function parsePhase(raw: unknown): RoomPhase {
 function parseCard(raw: unknown, drawCount: number): CardData | null {
   if (!raw || typeof raw !== "object") return null;
   const c = raw as Record<string, unknown>;
+  if (c.kind === "wild" && typeof c.wild_id === "string") {
+    return {
+      rank: "",
+      suit: "",
+      wildId: c.wild_id,
+      id: cardId("wild", c.wild_id, drawCount),
+    };
+  }
   if (typeof c.rank !== "string" || typeof c.suit !== "string") return null;
   return {
     rank: c.rank,
@@ -64,10 +93,12 @@ export function applyStateSync(
         .filter((p): p is Player => p !== null)
     : state.players;
 
+  const gameMode = parseGameMode(sync.game_mode, state.gameMode);
+  const deckSize = DECK_SIZE[gameMode];
   const cardsDrawn =
     typeof sync.cards_drawn === "number"
       ? sync.cards_drawn
-      : 52 - (sync.cards_remaining ?? state.cardsRemaining);
+      : deckSize - (sync.cards_remaining ?? state.cardsRemaining);
 
   let lastDrawnCard: CardData | null = null;
   let lastCardRule: string | null = null;
@@ -90,7 +121,7 @@ export function applyStateSync(
         : state.currentTurnSeat,
     cardsRemaining:
       parsePhase(sync.phase) === "lobby"
-        ? 52
+        ? deckSize
         : typeof sync.cards_remaining === "number"
           ? sync.cards_remaining
           : state.cardsRemaining,
@@ -99,6 +130,7 @@ export function applyStateSync(
     cardsDrawn,
     lastDrawnCard,
     lastCardRule,
+    lastDrawnBy: null,
     quickFlipEnabled:
       typeof sync.quick_flip_enabled === "boolean"
         ? sync.quick_flip_enabled
@@ -109,6 +141,9 @@ export function applyStateSync(
     bannedWords: Array.isArray(sync.banned_words) ? sync.banned_words : [],
     pendingInput: sync.pending_input ?? null,
     battle: sync.battle ?? null,
+    mates: parseMates(sync.mates),
+    gameMode,
+    direction: parseDirection(sync.direction, 1),
     joining: false,
   };
 }
@@ -146,7 +181,7 @@ export function reduceRoomEvent(
       return {
         ...state,
         phase: "in_progress",
-        cardsRemaining: 52,
+        cardsRemaining: DECK_SIZE[state.gameMode],
         joining: false,
       };
 
@@ -165,8 +200,13 @@ export function reduceRoomEvent(
         lastDrawnCard: card,
         lastCardRule:
           typeof payload.rule_text === "string" ? payload.rule_text : null,
+        lastDrawnBy:
+          typeof payload.player_id === "string" ? payload.player_id : null,
+        drawSeq: state.drawSeq + 1,
         kingsDrawn:
-          card?.rank === "K" ? state.kingsDrawn + 1 : state.kingsDrawn,
+          card && (card.rank === "K" || isWildKing(card.wildId))
+            ? state.kingsDrawn + 1
+            : state.kingsDrawn,
       };
     }
 
@@ -178,7 +218,17 @@ export function reduceRoomEvent(
             ? payload.quick_flip_enabled
             : state.quickFlipEnabled,
         challengeType: parseChallenge(payload.challenge_type, state.challengeType),
+        gameMode: parseGameMode(payload.game_mode, state.gameMode),
       };
+
+    case "players_reordered": {
+      if (!Array.isArray(payload.players)) return state;
+      const players = payload.players
+        .map(parsePlayer)
+        .filter((p): p is Player => p !== null)
+        .sort((a, b) => a.seat - b.seat);
+      return { ...state, players };
+    }
 
     case "host_changed":
       return {
@@ -218,6 +268,36 @@ export function reduceRoomEvent(
             ? [...state.bannedWords, payload.word]
             : state.bannedWords,
       };
+
+    case "direction_changed":
+      return { ...state, direction: parseDirection(payload.direction, state.direction) };
+
+    case "mate_broken": {
+      const [a, b] = [payload.a, payload.b];
+      if (typeof a !== "string" || typeof b !== "string") return state;
+      return {
+        ...state,
+        pendingInput: null,
+        mates: state.mates.filter(
+          ([x, y]) => !((x === a && y === b) || (x === b && y === a)),
+        ),
+        lastBroken: [a, b],
+        brokenSeq: state.brokenSeq + 1,
+      };
+    }
+
+    case "mate_chosen": {
+      const [a, b] = [payload.player_id, payload.mate_id];
+      if (typeof a !== "string" || typeof b !== "string") return state;
+      const dup = state.mates.some(
+        ([x, y]) => (x === a && y === b) || (x === b && y === a),
+      );
+      return {
+        ...state,
+        pendingInput: null,
+        mates: dup ? state.mates : [...state.mates, [a, b]],
+      };
+    }
 
     case "battle_resolved":
       return { ...state, battle: null };

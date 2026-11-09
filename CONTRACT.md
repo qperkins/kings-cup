@@ -225,3 +225,18 @@ New `GameState` fields (all in `state_sync` / `to_client_view()` unless noted): 
 `player_removed` carries the full client view (already repaired) plus `player_id` and `reason` (`left` | `kicked`); clients re-apply it like a `state_sync`. Repair rules when the removed player was: the host (host passes to the lowest remaining seat); on turn (turn moves to the next occupied seat); owing a rule/ban (cleared, turn moves on); a battle challenger or opponent (battle cancelled, drawer's turn ends). If fewer than 2 players remain in a running game, `game_finished` follows.
 
 Turn order uses the next occupied seat, so gaps are fine. `restart_game` and `start_game` begin at the lowest occupied seat.
+
+## Addendum — Drinking mates, lobby order, Royal Mayhem
+
+New `GameState` / `to_client_view()` fields: `mates [[id, id], ...]`, `game_mode` (`classic` | `royal_mayhem`, default `classic`), `direction` (`1` | `-1`). `pending_input.kind` also accepts `mate`, `duel`, `treason`; `battle` gains `kind` (`challenge` | `rps` | `duel`). Clients must default missing fields (`mates ?? []`, `game_mode ?? "classic"`, `direction ?? 1`) so an older server or client does not break during staggered deploys.
+
+**Drinking mates (rank 8).** Drawing an 8 sets `pending_input {kind: "mate"}` (skipped if the drawer is already mates with everyone).
+- `choose_mate {player_id, mate_id}` — pending drawer only; rejects self, unknown players and duplicate pairs → `mate_chosen {player_id, mate_id}` + `turn_advanced`. A player can be in several pairs; links do not chain. Pairs containing a departed player are dropped; `restart_game` clears all pairs.
+
+**Lobby order.** Host only, lobby only; the list must contain every current player exactly once. Seats are reassigned `0..n-1`.
+- `reorder_players {player_id, order[]}` and `shuffle_players {player_id}` → `players_reordered {players[]}`.
+
+**Royal Mayhem.**
+- `set_game_mode {player_id, mode}` — host only, lobby only → `settings_updated {quick_flip_enabled, challenge_type, game_mode}`.
+- `royal_mayhem` deck = 52 + 12 wildcards (`Card {kind: "wild", wild_id, rank: null, suit: null}`); the game ends on the 6th King (4 in `classic`); the 2 `king_chaos_*` wildcards count as Kings.
+- Engine-enforced wildcards: `reverse` → `direction_changed {direction}` + `turn_advanced`; `exile` → `player_exiled {player_id}` + `turn_advanced` (skipped player drinks, per the card text); `encore` → the drawer keeps the turn; `scepter` → `battle {kind: "rps"}` (random opponent, best-of-3 in person, drawer reports the loser via `resolve_battle`, `loser_id: null` is rejected); `duel` → `pending_input {kind: "duel"}` then `choose_target {player_id, target_id}` → `battle {kind: "duel"}`; `treason` → `pending_input {kind: "treason"}` then `break_mate {player_id, a, b}` → `mate_broken {player_id, a, b}` + `turn_advanced` (skipped when no pairs exist). Other wildcards are resolved by the table.

@@ -3,13 +3,16 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { Button } from "@/components/ui/button";
+import { WildCard } from "./WildCard";
 import { PlayingCard } from "./PlayingCard";
 
 interface GameOverOverlayProps {
   /** Name of the player who drew the 4th King */
   playerName: string;
   /** The 4th King card data */
-  kingCard: { rank: string; suit: string } | null;
+  kingCard: { rank: string; suit: string; wildId?: string } | null;
+  /** Which King ends the game: 4 in Classic, 6 in Royal Mayhem. */
+  kingLimit?: number;
   /** Total rounds played */
   roundNumber: number;
   /** Total cards drawn */
@@ -24,9 +27,14 @@ interface GameOverOverlayProps {
   showKingReveal?: boolean;
 }
 
+function ordinal(n: number): string {
+  return `${n}${n === 1 ? "st" : n === 2 ? "nd" : n === 3 ? "rd" : "th"}`;
+}
+
 export function GameOverOverlay({
   playerName,
   kingCard,
+  kingLimit = 4,
   roundNumber,
   cardsDrawn,
   isHost,
@@ -68,11 +76,15 @@ export function GameOverOverlay({
                 className="w-36"
                 style={{ perspective: 800 }}
               >
-                <PlayingCard
-                  rank={kingCard.rank}
-                  suit={kingCard.suit}
-                  disableHover
-                />
+                {kingCard.wildId ? (
+                  <WildCard wildId={kingCard.wildId} />
+                ) : (
+                  <PlayingCard
+                    rank={kingCard.rank}
+                    suit={kingCard.suit}
+                    disableHover
+                  />
+                )}
               </motion.div>
             )}
 
@@ -82,7 +94,7 @@ export function GameOverOverlay({
               transition={{ delay: 0.8 }}
               className="text-2xl font-bold text-foreground text-center"
             >
-              {playerName} drew the 4th King!
+              {playerName} drew the {ordinal(kingLimit)} King!
             </motion.p>
 
             <motion.p
