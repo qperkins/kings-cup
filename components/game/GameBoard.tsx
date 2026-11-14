@@ -211,7 +211,8 @@ type OverlayItem =
   | (OverlayItemBase & { kind: "broken"; names: [string, string] });
 
 const CARD_POPUP_MS = 3000;
-const TURN_POPUP_MS = 2500;
+// Turn popup stays until the player taps it.
+const TURN_POPUP_MS = Infinity;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -504,20 +505,20 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
         )}
 
         {/* ── Card Table ── */}
-        <div className="relative flex items-center justify-center gap-8 min-h-[280px]">
+        <div className="relative flex items-center justify-center gap-4 min-[360px]:gap-8 min-h-[280px]">
           {/* Deck pile */}
           <div className="relative">
             {deckRemaining > 2 && (
-              <div className="absolute top-[4px] left-[4px] w-[9.8rem] opacity-60">
+              <div className="absolute top-[4px] left-[4px] w-[min(9.8rem,38vw)] opacity-60">
                 <PlayingCard faceDown disableHover />
               </div>
             )}
             {deckRemaining > 1 && (
-              <div className="absolute top-[2px] left-[2px] w-[9.8rem] opacity-80">
+              <div className="absolute top-[2px] left-[2px] w-[min(9.8rem,38vw)] opacity-80">
                 <PlayingCard faceDown disableHover />
               </div>
             )}
-            <div className={cn("relative w-[9.8rem] rounded-lg", canDraw && "draw-glow")}>
+            <div className={cn("relative w-[min(9.8rem,38vw)] rounded-lg", canDraw && "draw-glow")}>
               <PlayingCard
                 faceDown
                 disableHover={!isMyTurn || blocked}
@@ -540,7 +541,7 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
           </div>
 
           {/* Discard / drawn card area */}
-          <div className="relative w-[9.8rem] min-h-[224px] flex items-center justify-center">
+          <div className="relative w-[min(9.8rem,38vw)] min-h-[160px] flex items-center justify-center">
             <AnimatePresence mode="wait">
               {lastDrawnCard ? (
                 <motion.div
@@ -553,7 +554,7 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
                   animate={{ x: 0, rotateY: 0, opacity: 1 }}
                   exit={{ opacity: 0, y: -20 }}
                   transition={CARD_SPRING}
-                  className={cn("w-[9.8rem]", canDraw && "cursor-pointer")}
+                  className={cn("w-[min(9.8rem,38vw)]", canDraw && "cursor-pointer")}
                   style={{ perspective: 800 }}
                   onClick={canDraw && !isDrawing ? handleDraw : undefined}
                 >
@@ -570,7 +571,7 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
               ) : (
                 <motion.div
                   key="empty-discard"
-                  className="w-[9.8rem] h-[224px] rounded-lg border-2 border-dashed border-muted flex items-center justify-center"
+                  className="w-[min(9.8rem,38vw)] aspect-[169/245] rounded-lg border-2 border-dashed border-muted flex items-center justify-center"
                 >
                   <span className="text-xs text-muted-foreground">Discard</span>
                 </motion.div>
@@ -607,30 +608,6 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
           ))}
         </div>
 
-        {/* ── Action Buttons ── */}
-        {canDraw && (
-          <Button
-            variant="cue"
-            onClick={handleDraw}
-            disabled={isDrawing || deckRemaining <= 0}
-            className={cn(
-              "h-20 w-full max-w-sm rounded-2xl text-2xl font-extrabold shadow-xl",
-              !isDrawing && "draw-shake",
-            )}
-          >
-            {isDrawing ? "Drawing..." : "DRAW CARD"}
-          </Button>
-        )}
-
-        {/* ── Rules created this game (Queen's Rules + Jack's Trap words) ── */}
-        <RulesPanel
-          rules={rules}
-          bannedWords={bannedWords}
-          mates={mates}
-          nameOf={nameOf}
-          youId={userId}
-        />
-
         {/* ── Quick Flip Battle ── */}
         {battle && (
           <div className="w-full max-w-xs space-y-3 rounded-lg border-2 border-primary bg-card p-4 text-center">
@@ -654,7 +631,7 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
                     <Button
                       key={id}
                       variant="outline"
-                      className="flex-1"
+                      className="h-auto min-h-9 min-w-0 flex-1 whitespace-normal break-words py-2"
                       disabled={isBusy}
                       onClick={() => runBusy(() => onResolveBattle?.(id) ?? Promise.resolve())}
                     >
@@ -784,6 +761,30 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
             </Button>
           </form>
         )}
+
+        {/* ── Action Buttons ── */}
+        {canDraw && (
+          <Button
+            variant="cue"
+            onClick={handleDraw}
+            disabled={isDrawing || deckRemaining <= 0}
+            className={cn(
+              "h-20 w-full max-w-sm rounded-2xl text-2xl font-extrabold shadow-xl",
+              !isDrawing && "draw-shake",
+            )}
+          >
+            {isDrawing ? "Drawing..." : "DRAW CARD"}
+          </Button>
+        )}
+
+        {/* ── Rules created this game (Queen's Rules + Jack's Trap words) ── */}
+        <RulesPanel
+          rules={rules}
+          bannedWords={bannedWords}
+          mates={mates}
+          nameOf={nameOf}
+          youId={userId}
+        />
 
         {/* ── Detailed Rules for Current Card ── */}
         {lastDrawnCard && detailedRule && (

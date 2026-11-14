@@ -7,7 +7,7 @@ export interface OverlayItemBase {
   key: string;
   /** Items of the same kind waiting in the queue are replaced by the newest. */
   kind: string;
-  /** Auto-dismiss delay in ms. */
+  /** Auto-dismiss delay in ms. Use Infinity to require a tap. */
   duration: number;
 }
 
@@ -32,7 +32,7 @@ export function useOverlayQueue<T extends OverlayItemBase>() {
   const key = current?.key;
   const duration = current?.duration;
   useEffect(() => {
-    if (key === undefined || duration === undefined) return;
+    if (key === undefined || duration === undefined || !Number.isFinite(duration)) return;
     const t = setTimeout(dismiss, duration);
     return () => clearTimeout(t);
   }, [key, duration, dismiss]);

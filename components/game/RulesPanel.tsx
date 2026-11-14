@@ -52,7 +52,7 @@ export function RulesPanel({
   nameOf = (id) => id,
   youId,
 }: RulesPanelProps) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const count = rules.length + bannedWords.length + mates.length;
   if (count === 0) return null;
 
