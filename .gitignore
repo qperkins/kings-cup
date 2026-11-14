@@ -49,3 +49,11 @@ vitestDocs.md
 
 .venv/
 __pycache__/
+
+# Agent-generated notes (kept locally, not published)
+AGENT3_BUGFIXES_APPLIED.md
+MERGE_SUMMARY_AGENT_BACKEND.md
+RATE_LIMITER_ATOMICITY_FIX.md
+RATE_LIMITING_IMPLEMENTATION.md
+STATE_SYNC_IMPLEMENTATION.md
+CONTRACT.md

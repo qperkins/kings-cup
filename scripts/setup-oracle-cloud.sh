@@ -81,6 +81,17 @@ echo "==> Obtaining Let's Encrypt certificate"
 mkdir -p /var/www/certbot
 certbot certonly --standalone -d "$DOMAIN" --email "$EMAIL" --agree-tos --non-interactive
 
+# Standalone needs port 80, which the nginx container holds, so renewals would
+# fail. Switch the saved renewal config to webroot (nginx serves
+# /var/www/certbot) and reload nginx after each renewal.
+RENEWAL_CONF="/etc/letsencrypt/renewal/${DOMAIN}.conf"
+sed -i 's/^authenticator = standalone/authenticator = webroot/' "$RENEWAL_CONF"
+printf 'webroot_path = /var/www/certbot,\n\n[[webroot_map]]\n%s = /var/www/certbot\n' "$DOMAIN" >> "$RENEWAL_CONF"
+mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+printf '#!/bin/sh\ndocker exec kings-cup-backend-nginx-1 nginx -s reload\n' \
+  > /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+chmod +x /etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh
+
 echo "==> Verifying certbot auto-renewal is enabled"
 if systemctl list-timers 2>/dev/null | grep -q certbot; then
   echo "certbot systemd timer is active"

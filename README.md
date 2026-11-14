@@ -1,5 +1,24 @@
 # King's Cup
 
+A real-time King's Cup drinking game for the web, live at [kxc.cards](https://kxc.cards).
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | Next.js, React, Tailwind, shadcn/ui, Motion |
+| Backend | FastAPI (Python), WebSocket |
+| State / pub-sub | Redis |
+| Proxy / TLS | Nginx, Let's Encrypt |
+| Hosting | Docker Compose on Oracle Cloud (api.kxc.cards) |
+| CI/CD | GitHub Actions, GHCR |
+
+See [`DEPLOYMENT.md`](DEPLOYMENT.md) for production setup.
+
+<!-- FULL README (commented out while it's being rewritten)
+
+# King's Cup
+
 An open-source King's Cup drinking game for the web — live at **[kxc.cards](https://kxc.cards)** (backend: `wss://api.kxc.cards`).
 
 I built a Next.js frontend and a FastAPI game engine backend that talk over WebSocket. The interesting part isn't the card rules — it's everything around keeping a room in sync when connections drop, phones lock, and six people share one WiFi router.
@@ -139,3 +158,5 @@ I deploy the backend to api.kxc.cards on Oracle's free ARM tier (frontend on Ver
 - **E2E** — manual workflow; WebSocket smoke against production
 
 See [`DEPLOYMENT.md`](DEPLOYMENT.md) for Oracle setup, GHCR visibility, and troubleshooting.
+
+-->
