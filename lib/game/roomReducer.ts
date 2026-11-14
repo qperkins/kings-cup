@@ -302,6 +302,7 @@ export function reduceRoomEvent(
     case "battle_resolved":
       return { ...state, battle: null };
 
+    case "returned_to_lobby":
     case "game_restarted":
       // Payload is a full client view; reuse state_sync handling (it resets
       // the pile, rules, banned words, pending input and battle).

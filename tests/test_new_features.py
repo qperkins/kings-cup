@@ -13,6 +13,7 @@ from game_engine.models import (
     Player,
     Rank,
     RestartGameIntent,
+    ReturnToLobbyIntent,
     ResolveBattleIntent,
     SetQuickFlipIntent,
     SubmitBanIntent,
@@ -117,3 +118,15 @@ def test_client_view_includes_new_fields():
     assert v["pending_input"]["kind"] == "word_ban"
     assert v["rules"] == [] and v["banned_words"] == [] and v["quick_flip_enabled"] is True
     assert v["drawn_pile_top"]["rule_text"] == "Jack's Trap"
+
+
+def test_return_to_lobby_is_host_only_and_finished_only():
+    s = _game(Rank.JACK)
+    with pytest.raises(EngineError):
+        apply_intent(s, ReturnToLobbyIntent(player_id="p0"))  # still in progress
+    apply_intent(s, EndGameIntent(player_id="p0"))
+    with pytest.raises(EngineError):
+        apply_intent(s, ReturnToLobbyIntent(player_id="p1"))  # not host
+    res = apply_intent(s, ReturnToLobbyIntent(player_id="p0"))
+    assert s.phase == GamePhase.LOBBY and s.drawn_pile == [] and s.kings_drawn == 0
+    assert len(s.players) == 3 and res.events[0].type == "returned_to_lobby"

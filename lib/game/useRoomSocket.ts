@@ -42,6 +42,7 @@ const EVENT_TYPES = [
   "direction_changed",
   "player_exiled",
   "game_restarted",
+  "returned_to_lobby",
   "action_success",
   "error",
 ] as const;
@@ -302,6 +303,10 @@ export function useRoomSocket(roomId: string, playerName: string) {
     () => sendSimple({ type: "restart_game" }, "Failed to restart game"),
     [sendSimple],
   );
+  const sendReturnToLobby = useCallback(
+    () => sendSimple({ type: "return_to_lobby" }, "Failed to return to lobby"),
+    [sendSimple],
+  );
   const sendEndGame = useCallback(
     () => sendSimple({ type: "end_game" }, "Failed to end game"),
     [sendSimple],
@@ -369,6 +374,7 @@ export function useRoomSocket(roomId: string, playerName: string) {
     sendBreakMate,
     sendSetGameMode,
     sendRestart,
+    sendReturnToLobby,
     sendEndGame,
     sendSetChallengeType,
     sendKick,

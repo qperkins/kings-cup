@@ -52,6 +52,7 @@ function RoomPageContent() {
     sendBreakMate,
     sendSetGameMode,
     sendRestart,
+    sendReturnToLobby,
     sendEndGame,
     sendSetChallengeType,
     sendKick,
@@ -163,6 +164,7 @@ function RoomPageContent() {
           onChooseTarget={sendChooseTarget}
           onBreakMate={sendBreakMate}
           onRestart={sendRestart}
+          onReturnToLobby={sendReturnToLobby}
           onEndGame={sendEndGame}
           onMakeHost={sendMakeHost}
           onKick={sendKick}

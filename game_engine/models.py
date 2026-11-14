@@ -387,6 +387,12 @@ class EndGameIntent(BaseModel):
     player_id: str
 
 
+class ReturnToLobbyIntent(BaseModel):
+    type: Literal["return_to_lobby"] = "return_to_lobby"
+    action_id: str = Field(default_factory=lambda: str(uuid4()))
+    player_id: str
+
+
 ActionIntent = (
     JoinIntent
     | DrawCardIntent
@@ -407,6 +413,7 @@ ActionIntent = (
     | ResolveBattleIntent
     | RestartGameIntent
     | EndGameIntent
+    | ReturnToLobbyIntent
 )
 
 

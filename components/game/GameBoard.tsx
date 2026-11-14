@@ -92,6 +92,7 @@ interface GameBoardProps {
   onChooseTarget?: (targetId: string) => Promise<unknown>;
   onBreakMate?: (a: string, b: string) => Promise<unknown>;
   onRestart?: () => Promise<unknown>;
+  onReturnToLobby?: () => Promise<unknown>;
   onEndGame?: () => Promise<unknown>;
   onMakeHost?: (playerId: string) => Promise<unknown>;
   onKick?: (playerId: string) => Promise<unknown>;
@@ -229,6 +230,7 @@ export function GameBoard({
   onChooseTarget,
   onBreakMate,
   onRestart,
+  onReturnToLobby,
   onEndGame,
   onMakeHost,
   onKick,
@@ -934,6 +936,7 @@ In Royal Mayhem, when the ${kingLimit}th King is drawn the player who drew it mu
             showKingReveal={fourKings}
             kingLimit={kingLimit}
             onPlayAgain={onRestart ? () => void runBusy(onRestart) : undefined}
+            onReturnToLobby={onReturnToLobby ? () => void runBusy(onReturnToLobby) : undefined}
             isRestarting={isBusy}
           />
         )}

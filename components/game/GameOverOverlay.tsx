@@ -21,6 +21,8 @@ interface GameOverOverlayProps {
   isHost: boolean;
   /** Called when the host clicks Play Again */
   onPlayAgain?: () => void;
+  /** Called when the host clicks Back to Lobby */
+  onReturnToLobby?: () => void;
   /** True while the restart intent is in flight */
   isRestarting?: boolean;
   /** Show the "4th King" reveal first (false when the host ended the game or the deck ran out) */
@@ -39,6 +41,7 @@ export function GameOverOverlay({
   cardsDrawn,
   isHost,
   onPlayAgain,
+  onReturnToLobby,
   isRestarting,
   showKingReveal = true,
 }: GameOverOverlayProps) {
@@ -135,13 +138,25 @@ export function GameOverOverlay({
             </div>
 
             {isHost && onPlayAgain ? (
-              <Button
-                onClick={onPlayAgain}
-                disabled={isRestarting}
-                className="w-full"
-              >
-                {isRestarting ? "Restarting..." : "Play Again"}
-              </Button>
+              <div className="flex w-full flex-col gap-2">
+                <Button
+                  onClick={onPlayAgain}
+                  disabled={isRestarting}
+                  className="w-full"
+                >
+                  {isRestarting ? "Restarting..." : "Play Again"}
+                </Button>
+                {onReturnToLobby && (
+                  <Button
+                    variant="outline"
+                    onClick={onReturnToLobby}
+                    disabled={isRestarting}
+                    className="w-full"
+                  >
+                    Back to Lobby
+                  </Button>
+                )}
+              </div>
             ) : isHost ? (
               <p className="text-sm text-muted-foreground text-center">
                 Play Again coming soon

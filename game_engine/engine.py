@@ -37,6 +37,7 @@ from .models import (
     ReorderPlayersIntent,
     RestartGameIntent,
     ResolveBattleIntent,
+    ReturnToLobbyIntent,
     ServerEvent,
     SetChallengeTypeIntent,
     SetGameModeIntent,
@@ -109,6 +110,8 @@ def apply_intent(state: GameState, intent: ActionIntent) -> EngineResult:
         result = _handle_restart(state, intent)
     elif isinstance(intent, EndGameIntent):
         result = _handle_end(state, intent)
+    elif isinstance(intent, ReturnToLobbyIntent):
+        result = _handle_return_to_lobby(state, intent)
     else:  # pragma: no cover - exhaustiveness guard
         raise EngineError(f"Unknown intent type: {intent!r}")
 
@@ -686,4 +689,24 @@ def _handle_end(state: GameState, intent: EndGameIntent) -> EngineResult:
     return EngineResult(
         state=state,
         events=[ServerEvent(type="game_finished", payload={"kings_drawn": state.kings_drawn})],
+    )
+
+
+def _handle_return_to_lobby(state: GameState, intent: ReturnToLobbyIntent) -> EngineResult:
+    _require_host(state, intent.player_id)
+    if state.phase != GamePhase.FINISHED:
+        raise EngineError("Game is not finished")
+    state.deck = []
+    state.direction = 1
+    state.drawn_pile = []
+    state.kings_drawn = 0
+    state.rules = []
+    state.banned_words = []
+    state.mates = []
+    state.pending_input = None
+    state.battle = None
+    state.phase = GamePhase.LOBBY
+    return EngineResult(
+        state=state,
+        events=[ServerEvent(type="returned_to_lobby", payload=state.to_client_view())],
     )
